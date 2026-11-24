@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>AI Shorts Studio — Gaming Pro</title><script>try{const t=localStorage.getItem("shorts-studio-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+/* Studio design system — offline, system fonts, native controls. */
+:root{color-scheme:light;--bg:#f7f8fa;--surface:#fff;--surface-alt:#f4f5f7;--input:#fff;--ink:#181b24;--muted:#626b7b;--subtle:#747d8c;--line:#e1e5eb;--strong-line:#cbd1dc;--accent:#4e46c5;--accent-hover:#4038ae;--accent-ink:#fff;--accent-soft:#efedff;--success:#18754d;--success-soft:#e7f5ec;--danger:#b32636;--danger-soft:#fff0f1;--focus:#6558e4;--track:#e5e8ee;--media:#111319;--radius:12px;--control-radius:8px;--space:4px;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;--ease:160ms ease;--header:68px}
+:root[data-theme=dark]{color-scheme:dark;--bg:#101114;--surface:#17191e;--surface-alt:#1e2026;--input:#191b20;--ink:#f2f3f7;--muted:#a3a9b6;--subtle:#9199a8;--line:#2b2e37;--strong-line:#414550;--accent:#b8afff;--accent-hover:#c9c2ff;--accent-ink:#201b48;--accent-soft:#29243f;--success:#88d9ad;--success-soft:#20382d;--danger:#ff9aa6;--danger-soft:#39262d;--focus:#b8afff;--track:#2d3039;--media:#0b0c10}
+@media(prefers-color-scheme:dark){:root:not([data-theme]){color-scheme:dark;--bg:#101114;--surface:#17191e;--surface-alt:#1e2026;--input:#191b20;--ink:#f2f3f7;--muted:#a3a9b6;--subtle:#9199a8;--line:#2b2e37;--strong-line:#414550;--accent:#b8afff;--accent-hover:#c9c2ff;--accent-ink:#201b48;--accent-soft:#29243f;--success:#88d9ad;--success-soft:#20382d;--danger:#ff9aa6;--danger-soft:#39262d;--focus:#b8afff;--track:#2d3039;--media:#0b0c10}}
+*,*::before,*::after{box-sizing:border-box}html{scroll-padding-top:calc(var(--header) + 20px);scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 var(--font);-webkit-font-smoothing:antialiased}h1,h2,h3,p{margin:0}h1{font-size:clamp(28px,3.1vw,42px);line-height:1.15;font-weight:650;letter-spacing:-1.65px}h2{font-size:19px;font-weight:650;letter-spacing:-.55px;line-height:1.35}h3{font-size:15px;font-weight:650;line-height:1.4;letter-spacing:-.15px}a{color:var(--accent)}.muted,small,.note{color:var(--muted)}small,.note{font-size:12px}.note{margin-top:10px;line-height:1.55;overflow-wrap:anywhere}.eyebrow,.section-kicker{font-size:10px;letter-spacing:1.15px;font-weight:700;text-transform:uppercase;color:var(--subtle)}.icon{width:18px;height:18px;flex:none;vertical-align:middle}.hidden{display:none!important}.skip-link{position:fixed;top:8px;left:12px;z-index:10;padding:10px;background:var(--surface);transform:translateY(-160%)}.skip-link:focus{transform:none}:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+/* Navigation */
+.topbar{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}.topbar-inner{height:var(--header);max-width:1480px;margin:auto;padding:0 40px;display:flex;align-items:center;gap:32px}.brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;white-space:nowrap}.brand strong{display:block;font-weight:680;font-size:16px;letter-spacing:-.45px;line-height:1.2}.brand small{display:block;font-size:10px;margin-top:3px}.logo{width:35px;height:35px;border-radius:10px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center}.logo .icon{width:22px;height:22px}.topbar nav{display:flex;align-items:center;gap:4px;margin:auto}.topbar nav a{display:inline-flex;gap:7px;align-items:center;padding:8px 12px;border-radius:var(--control-radius);font-size:13px;font-weight:550;text-decoration:none;color:var(--muted);white-space:nowrap;transition:background var(--ease),color var(--ease)}.topbar nav a:hover,.topbar nav a:focus-visible{background:var(--surface-alt);color:var(--ink)}.top-actions{display:flex;align-items:center;gap:14px}.local-status{font-size:12px;white-space:nowrap;color:var(--muted);display:flex;align-items:center;gap:6px}.status-dot,.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);flex:none}.icon-button{width:36px;height:36px;padding:0;display:grid;place-items:center}.icon-button .icon{grid-area:1/1}.icon-button .icon:first-child{display:none}:root[data-theme=dark] .icon-button .icon:first-child{display:block}:root[data-theme=dark] .icon-button .icon:last-child{display:none}
+/* Layout */
+main{max-width:1480px;margin:auto;padding:36px 40px 24px}.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:30px}.hero h1{margin:8px 0 9px}.hero p{font-size:14px}.hero-separator{padding:0 5px;color:var(--strong-line)}.device-label{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;white-space:nowrap;padding-bottom:3px}.device-label .icon{width:23px;height:23px}.device-label small{display:block;font-size:11px}.layout{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20px;align-items:start}.workspace{display:grid;gap:20px;min-width:0}.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:24px;min-width:0}.config{padding:0;overflow:hidden}.section-heading{display:flex;align-items:center;gap:12px;padding:22px 22px 18px}.section-heading p{font-size:12px;margin-top:2px}.section-icon{width:36px;height:36px;display:grid;place-items:center;flex:none;background:var(--surface-alt);border-radius:9px;color:var(--muted)}.section-icon .icon{width:20px;height:20px}.row{display:flex;align-items:center;gap:12px;justify-content:space-between}.row>div{min-width:0}.row p{font-size:13px;margin-top:3px}.row .pill{flex:none}.section-kicker{margin-bottom:12px}.form-core{padding:0 22px 6px}.field{margin-bottom:14px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0 0 14px}.fields>div{min-width:0}.field .note{margin-top:5px}label{display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--ink)}input,select,textarea{width:100%;min-width:0;font:inherit;font-size:13px;color:var(--ink);background:var(--input);border:1px solid var(--strong-line);border-radius:var(--control-radius);padding:10px 11px;outline-offset:2px;transition:border-color var(--ease),background var(--ease);min-height:39px}input::placeholder,textarea::placeholder{color:var(--subtle);opacity:1}input:focus,select:focus,textarea:focus{border-color:var(--focus);outline:2px solid var(--focus);outline-offset:1px}select{padding-right:23px;text-overflow:ellipsis;cursor:pointer}textarea{min-height:90px;resize:vertical;line-height:1.45}input:disabled,select:disabled,textarea:disabled{opacity:.65;cursor:not-allowed}.check{display:flex;align-items:flex-start;gap:9px;font-size:12px;font-weight:400;line-height:1.55;margin:10px 0;cursor:pointer;color:var(--muted)}.check input{flex:none;appearance:auto;min-height:0;width:16px;height:16px;padding:0;margin:2px 0 0;accent-color:var(--accent);cursor:pointer}.settings-group{border-top:1px solid var(--line);margin:0}.settings-group summary{padding:14px 22px;display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none}.settings-group summary:hover{background:var(--surface-alt)}summary::-webkit-details-marker{display:none}.settings-group summary>.icon:first-child{color:var(--muted)}.settings-group summary span{flex:1;min-width:0}.settings-group summary strong{display:block;font-size:13px;font-weight:600}.settings-group summary small{display:block;font-size:11px;color:var(--muted);margin-top:1px}.disclosure{color:var(--muted);transition:transform var(--ease)}details[open]>summary .disclosure{transform:rotate(180deg)}.group-body{padding:2px 22px 12px}.group-body .field:last-child{margin-bottom:0}.group-body label[for=daily_limit]{margin-top:12px}.permission{padding:12px 22px;border-top:1px solid var(--line);background:var(--surface-alt)}.permission .check{margin:0;color:var(--ink)}.form-footer{padding:16px 22px 20px}.actions{display:flex;gap:8px}.actions button{white-space:normal;line-height:1.3}.actions #start{flex:1}.actions #stop{flex:none}.error{color:var(--danger);background:var(--danger-soft);border-radius:var(--control-radius);white-space:pre-wrap;overflow-wrap:anywhere;padding:10px 12px;margin-top:12px;font-size:12px}.error:empty{display:none}
+/* Shared actions */
+button,a.download{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;border:1px solid transparent;border-radius:var(--control-radius);padding:9px 13px;font:inherit;font-size:12px;font-weight:600;text-decoration:none;cursor:pointer;transition:background var(--ease),border-color var(--ease),color var(--ease),transform var(--ease);color:var(--ink);background:var(--surface-alt)}button:hover:not(:disabled),a.download:hover{background:var(--line)}button:active:not(:disabled),a.download:active{transform:scale(.985)}button:disabled{opacity:.48;cursor:not-allowed}.secondary,#stop,.icon-button,a.download{background:var(--surface);border-color:var(--strong-line)}#start,.primary-button,.publish,a.download.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}#start:hover:not(:disabled),.primary-button:hover:not(:disabled),.publish:hover:not(:disabled),a.download.primary:hover{background:var(--accent-hover)}.text-link{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;text-decoration:none}.text-link:hover{text-decoration:underline}.text-link .icon{width:15px;height:15px}
+/* Session monitor */
+.monitor-heading{align-items:flex-start;flex-wrap:wrap}.monitor-heading>div{flex:1 1 180px}.monitor-heading h2{overflow-wrap:anywhere;margin-top:4px}.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap;background:var(--surface-alt);color:var(--muted)}.pill .dot{background:var(--subtle)}#livePill[data-state=running]{background:var(--accent-soft);color:var(--accent)}#livePill[data-state=running] .dot{background:var(--accent)}#livePill.live .dot{background:var(--danger)}#livePill[data-state=done]{background:var(--success-soft);color:var(--success)}#livePill[data-state=done] .dot{background:var(--success)}#livePill[data-state=failed]{background:var(--danger-soft);color:var(--danger)}#livePill[data-state=failed] .dot{background:var(--danger)}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:24px 0;gap:0}.metric{padding:0 14px;min-width:0;border-left:1px solid var(--line)}.metric:first-child{border-left:0;padding-left:0}.metric small{font-size:11px;display:block}.metric strong{display:block;margin-top:4px;font-size:clamp(19px,2.15vw,29px);font-weight:610;letter-spacing:-.8px;line-height:1.2;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.tracks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.track{background:var(--surface-alt);padding:13px 14px;border-radius:9px;min-width:0}.track b{display:block;font-size:12px;font-weight:600;margin-bottom:4px}.track>span{font-size:12px;overflow-wrap:anywhere}.coverage{margin-top:12px}.bar{height:5px;background:var(--track);border-radius:4px;overflow:hidden;margin:12px 0 2px}.bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:4px;transition:width 300ms ease}.bar.indeterminate i{width:34%;animation:slide 2s ease-in-out infinite}@keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(300%)}}#message{margin-top:14px;color:var(--ink);font-weight:550}#eta{margin-top:4px}.log-panel{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}.log-panel summary{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:12px;cursor:pointer;list-style:none}.log-panel pre{margin:12px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;background:var(--surface-alt);border-radius:8px;padding:12px;color:var(--muted);font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
+/* Highlight collection */
+.clips{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:14px;margin-top:18px}.clips:empty{display:none}.clip{min-width:0;overflow:hidden;border:1px solid var(--line);border-radius:10px;background:var(--surface);animation:appear 180ms ease-out}@keyframes appear{from{opacity:.45;transform:translateY(4px)}to{opacity:1;transform:none}}.clip video{display:block;width:100%;height:clamp(190px,24vw,300px);background:var(--media);object-fit:contain}.clipbody{padding:14px}.clipbody h3{margin:7px 0;overflow-wrap:anywhere}.clipbody>p{font-size:12px;overflow-wrap:anywhere}.score{color:var(--success);font-size:11px;font-weight:650}.downloads{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}.downloads .download{min-height:32px;padding:6px 10px}.hook{font-size:12px;color:var(--muted);font-weight:500;margin-top:8px}.clipbody details{border-top:1px solid var(--line);margin-top:14px;padding-top:11px}.clipbody details summary{font-size:12px;font-weight:600;cursor:pointer;color:var(--accent)}.clipbody details label{margin-top:12px}.clipbody input,.clipbody select,.clipbody textarea{font-size:12px}.publish{width:100%;margin-top:10px}.channel-msg{font-size:12px;margin-top:8px;overflow-wrap:anywhere;color:var(--muted)}.channel-msg:empty{display:none}.empty{padding:46px 16px 38px;margin-top:18px;background:var(--surface-alt);border-radius:10px;text-align:center}.empty-icon{display:grid;place-items:center;margin:0 auto 12px;width:48px;height:48px;border-radius:12px;background:var(--surface);color:var(--muted)}.empty-icon .icon{width:23px;height:23px}.empty strong{display:block;font-size:15px;font-weight:650}.empty p{font-size:13px;margin:5px auto 13px;max-width:340px}.skeleton-state{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}.skeleton-card{border-radius:10px;background:var(--surface-alt);padding:12px}.skeleton{background:var(--track);border-radius:6px;animation:breathe 1.6s ease-in-out infinite}.skeleton.media{height:150px}.skeleton.line{height:10px;margin-top:12px;width:85%}.skeleton.short{width:50%;margin-bottom:4px}.skeleton-state p{grid-column:1/-1;color:var(--muted);font-size:12px;text-align:center}@keyframes breathe{50%{opacity:.45}}
+/* Channel and dialogs */
+.channel-row{justify-content:flex-start;align-items:center}.channel-row>div:nth-child(2){flex:1}.channel-row .secondary{flex:none}.channel-status{overflow-wrap:anywhere}.youtube-icon{background:var(--surface-alt);color:var(--danger)}.connection>.note{padding-left:48px}.connection button[aria-busy=true] .icon{animation:breathe 1s ease infinite}.dialog-body{padding:24px}.dialog-body .section-icon{margin-bottom:16px}.dialog-body h2{margin-bottom:10px}.dialog-body .note{margin-top:12px}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:24px}dialog{width:min(440px,calc(100vw - 32px));padding:0;border:1px solid var(--line);border-radius:15px;color:var(--ink);background:var(--surface);box-shadow:0 12px 45px #0002}dialog::backdrop{background:rgb(12 14 22 / .55)}dialog[open]{animation:appear 160ms ease-out}footer{display:flex;justify-content:space-between;gap:12px;margin-top:26px;color:var(--muted);font-size:11px}
+@media(max-width:1100px){main{padding:28px 24px 24px}.topbar-inner{padding:0 24px;gap:15px}.layout{grid-template-columns:minmax(290px,340px) minmax(0,1fr);gap:16px}.workspace{gap:16px}.card:not(.config){padding:20px}.metric{padding:0 9px}.metrics{margin:20px 0}.topbar nav a{padding:8px}.device-label{display:none}}
+@media(max-width:850px){.layout{grid-template-columns:1fr}.topbar-inner{gap:12px}.topbar nav{margin:auto}.config .form-core{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}.form-core .section-kicker,.form-core .fields,.form-core #urlField,.form-core #localField{grid-column:1/-1}.form-core .field,.form-core .section-kicker{margin:0}.form-core .fields{grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 8px}.config .form-core{padding-bottom:12px}.config .form-footer .actions{justify-content:flex-end}.config .form-footer #start{flex:none}.clip video{height:260px}.card:not(.config){padding:22px}}
+@media(max-width:600px){:root{--header:104px}.topbar-inner{height:auto;min-height:var(--header);flex-wrap:wrap;justify-content:space-between;padding:10px 16px 6px;gap:5px}.topbar nav{order:3;flex:1 0 100%;justify-content:flex-start;margin:2px 0 0;gap:3px}.topbar nav a{padding:6px 9px;font-size:12px}.topbar nav a .icon{width:15px;height:15px}.top-actions{margin-left:auto;gap:8px}.local-status{font-size:11px}main{padding:24px 14px 18px}.hero{margin-bottom:22px}.hero h1{letter-spacing:-1px}.hero p{font-size:13px}.card:not(.config){padding:17px}.section-heading{padding:18px 16px 16px}.config .form-core,.group-body{padding-left:16px;padding-right:16px}.config .form-core{display:block}.form-core .field,.form-core .section-kicker{margin-bottom:12px}.form-core .fields{grid-template-columns:repeat(2,minmax(0,1fr))}.settings-group summary,.permission,.form-footer{padding-left:16px;padding-right:16px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 0}.metric{padding-left:12px}.metric:nth-child(odd){border:0;padding-left:0}.metric strong{font-size:23px}.tracks{grid-template-columns:1fr;gap:9px}.coverage{margin-top:9px}.channel-row{flex-wrap:wrap}.channel-row>div:nth-child(2){flex-basis:calc(100% - 50px)}.channel-row .secondary{margin-left:48px}.connection>.note{padding-left:0}.clip video{height:280px}.skeleton.media{height:110px}footer{flex-direction:column;gap:3px}.empty{padding:32px 12px}.dialog-body{padding:20px}.dialog-actions{flex-wrap:wrap}.config .form-footer #start{flex:1}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none!important;transition:none!important}}
+
+</style></head><body>
+<a class="skip-link" href="#setup">
+ Skip to workspace
+</a>
+<header class="topbar">
+ <div class="topbar-inner">
+  <a aria-label="AI Shorts Studio home" class="brand" href="#top">
+   <span class="logo">
+    <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+     <path d="M5 4h11l3 3v13H5z">
+     </path>
+     <path d="M16 4v4h3M9 11l6 3-6 3z">
+     </path>
+    </svg>
+   </span>
+   <span>
+    <strong>
+     Shorts
+     <span class="brand-light">
+      Studio
+     </span>
+    </strong>
+    <small>
+     Gaming Pro · V9.1
+    </small>
+   </span>
+  </a>
+  <nav aria-label="Workspace navigation">
+   <a href="#setup">
+    <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+     <rect height="7" rx="1.5" width="7" x="3" y="3">
+     </rect>
+     <rect height="7" rx="1.5" width="7" x="14" y="3">
+     </rect>
+     <rect height="7" rx="1.5" width="7" x="3" y="14">
+     </rect>
+     <rect height="7" rx="1.5" width="7" x="14" y="14">
+     </rect>
+    </svg>
+    <span>
+     Workspace
+    </span>
+   </a>
+   <a href="#highlights">
+    <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+     <rect height="16" rx="2" width="18" x="3" y="4">
+     </rect>
+     <path d="M7 4v16m10-16v16M3 9h4m10 0h4M3 15h4m10 0h4">
+     </path>
+    </svg>
+    <span>
+     Highlights
+    </span>
+   </a>
+   <a href="#channel">
+    <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+     <rect height="14" rx="4" width="18" x="3" y="5">
+     </rect>
+     <path d="m10 9 5 3-5 3z">
+     </path>
+    </svg>
+    <span>
+     Channel
+    </span>
+   </a>
+  </nav>
+  <div class="top-actions">
+   <span class="local-status">
+    <span class="status-dot">
+    </span>
+    Local AI
+   </span>
+   <button aria-label="Toggle color theme" class="icon-button" id="themeToggle" title="Toggle color theme" type="button">
+    <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+     <circle cx="12" cy="12" r="4">
+     </circle>
+     <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5">
+     </path>
+    </svg>
+    <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+     <path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z">
+     </path>
+    </svg>
+   </button>
+  </div>
+ </div>
+</header>
+<main id="top">
+ <div class="hero">
+  <div>
+   <div class="eyebrow">
+    CREATOR WORKSPACE
+    <span class="hero-separator">
+     /
+    </span>
+    GAMING PRO
+   </div>
+   <h1>
+    Make the moment count.
+   </h1>
+   <p class="muted">
+    Find the best parts of any stream. Edit, review and publish from your Mac.
+   </p>
+  </div>
+  <div class="device-label">
+   <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+    <rect height="13" rx="2" width="18" x="3" y="4">
+    </rect>
+    <path d="M8 21h8m-4-4v4">
+    </path>
+   </svg>
+   <span>
+    Apple Silicon
+    <small>
+     Runs locally on your Mac
+    </small>
+   </span>
+  </div>
+ </div>
+ <div class="layout">
+  <aside aria-labelledby="setupTitle" class="card config" id="setup">
+   <div class="section-heading">
+    <div class="section-icon">
+     <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+      <path d="M4 7h16M4 17h16">
+      </path>
+      <circle cx="9" cy="7" r="2">
+      </circle>
+      <circle cx="15" cy="17" r="2">
+      </circle>
+     </svg>
+    </div>
+    <div>
+     <h2 id="setupTitle">
+      New session
+     </h2>
+     <p class="muted">
+      Configure your next batch of Shorts.
+     </p>
+    </div>
+   </div>
+   <form id="form">
+    <div class="form-core">
+     <div class="section-kicker">
+      Source &amp; edit
+     </div>
+     <div class="field">
+      <label for="source_type">
+       Source
+      </label>
+      <select id="source_type">
+       <option value="youtube">
+        YouTube link
+       </option>
+       <option value="local">
+        Local authorized video file
+       </option>
+      </select>
+     </div>
+     <div class="field" id="urlField">
+      <label for="url">
+       YouTube video or live link
+      </label>
+      <input autocomplete="off" id="url" placeholder="https://youtube.com/watch?v=…" required="" type="url"/>
+     </div>
+     <div class="field hidden" id="localField">
+      <label for="local_path">
+       Local file path
+      </label>
+      <input autocomplete="off" id="local_path" placeholder="/Users/you/Movies/video.mp4" type="text"/>
+      <p class="note">
+       Drag a file into Terminal to get its full path, then paste it here.
+      </p>
+     </div>
+     <div class="field">
+      <label for="mode">
+       Source mode
+      </label>
+      <select id="mode">
+       <option value="auto">
+        Auto detect (recommended)
+       </option>
+       <option value="live">
+        Live now
+       </option>
+       <option value="replay">
+        Completed stream / video
+       </option>
+      </select>
+     </div>
+     <div class="field">
+      <label for="edit_style">
+       Editing style
+      </label>
+      <select id="edit_style">
+       <option value="gaming">
+        Gaming Pro · gameplay top / facecam bottom
+       </option>
+       <option value="dynamic">
+        Creator · jump cuts + punch-ins
+       </option>
+       <option value="clean">
+        Clean · original timing
+       </option>
+      </select>
+      <p class="note">
+       Gaming Pro always exports gameplay on top and the streamer below (50/50). Candidates without a reliable facecam are skipped. No text overlays.
+      </p>
+     </div>
+     <div class="fields">
+      <div>
+       <label for="count">
+        Clip target
+       </label>
+       <select id="count">
+        <option value="6">
+         6 highlights
+        </option>
+        <option value="0">
+         Unlimited
+        </option>
+        <option value="3">
+         3 highlights
+        </option>
+        <option value="12">
+         12 highlights
+        </option>
+       </select>
+      </div>
+      <div>
+       <label for="segment">
+        Analyse every
+       </label>
+       <select id="segment">
+        <option value="120">
+         2 min
+        </option>
+        <option value="60">
+         1 min
+        </option>
+        <option value="180">
+         3 min
+        </option>
+       </select>
+      </div>
+      <div>
+       <label for="minutes">
+        Source time limit
+       </label>
+       <select id="minutes">
+        <option value="0">
+         No limit
+        </option>
+        <option value="30">
+         30 min
+        </option>
+        <option value="60">
+         1 hour
+        </option>
+        <option value="180">
+         3 hours
+        </option>
+        <option value="720">
+         12 hours
+        </option>
+       </select>
+      </div>
+      <div>
+       <label for="score">
+        Minimum score
+       </label>
+       <select id="score">
+        <option value="75">
+         75 / 100
+        </option>
+        <option value="60">
+         60 / 100
+        </option>
+        <option selected="" value="85">
+         85 / 100
+        </option>
+        <option value="90">
+         90 / 100
+        </option>
+       </select>
+      </div>
+     </div>
+    </div>
+    <details class="settings-group">
+     <summary>
+      <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <rect height="16" rx="2" width="18" x="3" y="4">
+       </rect>
+       <path d="M7 4v16m10-16v16M3 9h4m10 0h4M3 15h4m10 0h4">
+       </path>
+      </svg>
+      <span>
+       <strong>
+        Advanced editing
+       </strong>
+       <small>
+        Layout, language and facecam
+       </small>
+      </span>
+      <svg aria-hidden="true" class="icon disclosure" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <path d="m9 10 3 3 3-3">
+       </path>
+      </svg>
+     </summary>
+     <div class="group-body">
+      <div class="field">
+       <label for="layout">
+        Export format (Creator / Clean only)
+       </label>
+       <select id="layout">
+        <option value="fit">
+         9:16 Shorts · fit full frame
+        </option>
+        <option value="original">
+         Original framing (highlight)
+        </option>
+        <option value="crop">
+         9:16 Shorts · center crop
+        </option>
+       </select>
+      </div>
+      <div class="fields">
+       <div>
+        <label for="streamer">
+         Streamer (optional)
+        </label>
+        <input id="streamer" maxlength="80" placeholder="Streamer name"/>
+       </div>
+       <div>
+        <label for="game">
+         Game (optional)
+        </label>
+        <input id="game" maxlength="80" placeholder="Valorant, Minecraft…"/>
+       </div>
+      </div>
+      <div class="field">
+       <label for="face_region">
+        Facecam region (optional)
+       </label>
+       <input autocomplete="off" id="face_region" placeholder="x,y,width,height e.g. 0.75,0.02,0.24,0.30"/>
+       <p class="note">
+        Normalized coordinates of the webcam box; leave blank for auto detection. Set manually if detection misses your streamer. Gaming Pro requires both panels.
+       </p>
+      </div>
+      <div class="field">
+       <label for="language">
+        Spoken language
+       </label>
+       <select id="language">
+        <option value="">
+         Auto detect
+        </option>
+        <option value="en">
+         English
+        </option>
+        <option value="hi">
+         Hindi
+        </option>
+        <option value="mr">
+         Marathi
+        </option>
+       </select>
+      </div>
+      <label class="check">
+       <input id="captions" type="checkbox"/>
+       Legacy styles only: subtitles + hook
+      </label>
+     </div>
+    </details>
+    <details class="settings-group">
+     <summary>
+      <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <rect height="13" rx="2" width="18" x="3" y="4">
+       </rect>
+       <path d="M8 21h8m-4-4v4">
+       </path>
+      </svg>
+      <span>
+       <strong>
+        Source &amp; storage
+       </strong>
+       <small>
+        Smart downloads and viewing access
+       </small>
+      </span>
+      <svg aria-hidden="true" class="icon disclosure" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <path d="m9 10 3 3 3-3">
+       </path>
+      </svg>
+     </summary>
+     <div class="group-body">
+      <div class="field" id="authField">
+       <label for="source_auth">
+        Viewing session
+       </label>
+       <select id="source_auth">
+        <option value="public">
+         Public · no login
+        </option>
+        <option value="chrome">
+         Chrome · my authorized viewing account
+        </option>
+       </select>
+       <p class="note">
+        Optional Chrome access stays local; macOS may ask for Keychain approval. Viewing membership alone does not grant republication rights.
+       </p>
+      </div>
+      <label class="check" id="smartField">
+       <input checked="" id="smart_replay" type="checkbox"/>
+       Smart Replay · low-resolution analysis for Gaming Pro; HD only for selected clips.
+      </label>
+      <label class="check" id="nativeField">
+       <input id="native_fallback" type="checkbox"/>
+       Allow full replay download only when Smart Replay is off.
+      </label>
+      <label class="check">
+       <input id="keep_source" type="checkbox"/>
+       Keep raw recording segments (uses more disk)
+      </label>
+     </div>
+    </details>
+    <details class="settings-group">
+     <summary>
+      <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <rect height="14" rx="4" width="18" x="3" y="5">
+       </rect>
+       <path d="m10 9 5 3-5 3z">
+       </path>
+      </svg>
+      <span>
+       <strong>
+        Publishing &amp; analytics
+       </strong>
+       <small>
+        Optional public uploads and feedback
+       </small>
+      </span>
+      <svg aria-hidden="true" class="icon disclosure" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <path d="m9 10 3 3 3-3">
+       </path>
+      </svg>
+     </summary>
+     <div class="group-body">
+      <div class="field">
+       <label class="check">
+        <input id="auto_public" type="checkbox"/>
+        Automatically publish qualifying Shorts PUBLIC
+       </label>
+       <label for="audience">
+        Audience
+       </label>
+       <select id="audience">
+        <option value="">
+         Choose audience
+        </option>
+        <option value="no">
+         Not made for kids
+        </option>
+        <option value="yes">
+         Made for kids
+        </option>
+       </select>
+       <label for="daily_limit">
+        Daily public upload cap
+       </label>
+       <input id="daily_limit" max="30" min="1" type="number" value="6"/>
+       <label class="check">
+        <input id="public_confirm" type="checkbox"/>
+        I authorize public uploads to the verified channel without per-clip review.
+       </label>
+       <label class="check">
+        <input id="analytics_refresh" type="checkbox"/>
+        Refresh optional Analytics feedback once per day (requires separate consent)
+       </label>
+       <p class="note">
+        Check your channel before starting. Stop prevents new uploads; an in-flight request may finish.
+       </p>
+      </div>
+     </div>
+    </details>
+    <div class="permission">
+     <label class="check">
+      <input id="authorized" required="" type="checkbox"/>
+      I have permission to acquire and reuse this stream in accordance with YouTube's terms.
+     </label>
+    </div>
+    <div class="form-footer">
+     <div class="actions">
+      <button id="start" type="submit">
+       <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+        <path d="m8 5 12 7-12 7z">
+        </path>
+       </svg>
+       Find &amp; edit highlights
+      </button>
+      <button disabled="" id="stop" type="button">
+       <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+        <rect height="12" rx="2" width="12" x="6" y="6">
+        </rect>
+       </svg>
+       Stop session
+      </button>
+     </div>
+     <p class="error" id="error" role="alert"></p>
+     <p class="note">
+      Stop finishes the active segment. A clip target stops after the first qualifying highlights. Choose Unlimited to scan the full replay.
+     </p>
+    </div>
+   </form>
+  </aside>
+  <div class="workspace">
+   <section aria-labelledby="sourceTitle" class="card session-monitor" id="monitor">
+    <div class="row monitor-heading">
+     <div>
+      <div class="eyebrow">
+       Session monitor
+      </div>
+      <h2 id="sourceTitle">
+       Session overview
+      </h2>
+     </div>
+     <span class="pill" id="sourceMode">
+      AUTO DETECT
+     </span>
+     <span class="pill" id="livePill">
+      <span class="dot">
+      </span>
+      <span id="state" role="status">
+       Idle
+      </span>
+     </span>
+    </div>
+    <div class="metrics">
+     <div class="metric">
+      <small>
+       Elapsed
+      </small>
+      <strong id="elapsed">
+       00:00:00
+      </strong>
+     </div>
+     <div class="metric">
+      <small>
+       Segments done
+      </small>
+      <strong id="segments">
+       0 / 0
+      </strong>
+     </div>
+     <div class="metric">
+      <small>
+       Queued
+      </small>
+      <strong id="queued">
+       0
+      </strong>
+     </div>
+     <div class="metric">
+      <small>
+       Highlights
+      </small>
+      <strong id="ready">
+       0
+      </strong>
+     </div>
+    </div>
+    <div class="tracks">
+     <div class="track">
+      <b>
+       Source acquisition
+      </b>
+      <span class="muted" id="capture">
+       Not connected
+      </span>
+      <div aria-label="Source acquisition" aria-valuemax="100" aria-valuemin="0" aria-valuenow="0" class="bar" id="captureBar" role="progressbar">
+       <i>
+       </i>
+      </div>
+     </div>
+     <div class="track">
+      <b>
+       Local AI processing
+      </b>
+      <span class="muted" id="stage">
+       Waiting
+      </span>
+      <div aria-label="AI processing" aria-valuemax="100" aria-valuemin="0" aria-valuenow="0" class="bar" id="processBar" role="progressbar">
+       <i>
+       </i>
+      </div>
+     </div>
+    </div>
+    <div class="track coverage">
+     <b>
+      Source analysis coverage
+     </b>
+     <span class="muted" id="scanProgress">
+      Waiting for source
+     </span>
+     <div aria-label="Source analysis coverage" aria-valuemax="100" aria-valuemin="0" aria-valuenow="0" class="bar" id="scanBar" role="progressbar">
+      <i>
+      </i>
+     </div>
+    </div>
+    <p aria-live="polite" class="note" id="message">
+     Start a session to see progress.
+    </p>
+    <p class="note" id="eta">
+     Replay progress is based on analysed footage. Live streams have no fixed end.
+    </p>
+    <details class="log-panel">
+     <summary>
+      <span>
+       Technical logs
+      </span>
+      <svg aria-hidden="true" class="icon disclosure" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <path d="m9 10 3 3 3-3">
+       </path>
+      </svg>
+     </summary>
+     <pre id="logs" tabindex="0">No session yet.</pre>
+    </details>
+   </section>
+   <section aria-labelledby="highlightsTitle" class="card" id="highlights">
+    <div class="row">
+     <div>
+      <h2 id="highlightsTitle">
+       Highlights
+      </h2>
+      <p class="muted">
+       New clips appear automatically, without reloading.
+      </p>
+     </div>
+     <span class="pill" id="clipCount">
+      0 ready
+     </span>
+    </div>
+    <div class="empty" id="empty">
+     <div class="empty-icon">
+      <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <rect height="16" rx="2" width="18" x="3" y="4">
+       </rect>
+       <path d="M7 4v16m10-16v16M3 9h4m10 0h4M3 15h4m10 0h4">
+       </path>
+      </svg>
+     </div>
+     <strong>
+      No highlights yet
+     </strong>
+     <p class="muted">
+      Start a session and your finished clips will appear here, one at a time.
+     </p>
+     <a class="text-link" href="#setup">
+      Configure a session
+      <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <path d="M5 12h14m-6-6 6 6-6 6">
+       </path>
+      </svg>
+     </a>
+    </div>
+    <div class="skeleton-state hidden" id="clipSkeleton" role="status">
+     <div aria-hidden="true" class="skeleton-card">
+      <div class="skeleton media">
+      </div>
+      <div class="skeleton line">
+      </div>
+      <div class="skeleton line short">
+      </div>
+     </div>
+     <div aria-hidden="true" class="skeleton-card">
+      <div class="skeleton media">
+      </div>
+      <div class="skeleton line">
+      </div>
+      <div class="skeleton line short">
+      </div>
+     </div>
+     <p>
+      Finding and editing your first highlight…
+     </p>
+    </div>
+    <div class="clips" id="clips">
+    </div>
+    <p class="note">
+     Scores are editorial estimates, not predicted views. Automatic publishing requires rights and explicit consent.
+    </p>
+   </section>
+   <section aria-labelledby="channelTitle" class="card connection" id="channel">
+    <div class="row channel-row">
+     <div class="section-icon youtube-icon">
+      <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <rect height="14" rx="4" width="18" x="3" y="5">
+       </rect>
+       <path d="m10 9 5 3-5 3z">
+       </path>
+      </svg>
+     </div>
+     <div>
+      <h2 id="channelTitle">
+       YouTube connection
+      </h2>
+      <p class="muted channel-status" id="channelStatus" role="status">
+       Connect via Terminal: python publisher.py connect
+      </p>
+     </div>
+     <button class="secondary" id="channelRefresh" type="button">
+      <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+       <path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7">
+       </path>
+      </svg>
+      <span>
+       Check channel
+      </span>
+     </button>
+    </div>
+    <p class="note">
+     Gaming Pro can publish PUBLIC automatically after explicit session authorization. No private fallback.
+    </p>
+   </section>
+  </div>
+ </div>
+ <footer>
+  <span>
+   AI Shorts Studio
+   <span class="muted">
+    · Gaming Pro V9.1
+   </span>
+  </span>
+  <span>
+   Local processing · Your files stay on your Mac until you upload.
+  </span>
+ </footer>
+</main>
+<dialog aria-describedby="confirmText" aria-labelledby="confirmTitle" id="confirmDialog">
+ <div class="dialog-body">
+  <div class="section-icon">
+   <svg aria-hidden="true" class="icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewbox="0 0 24 24">
+    <rect height="14" rx="4" width="18" x="3" y="5">
+    </rect>
+    <path d="m10 9 5 3-5 3z">
+    </path>
+   </svg>
+  </div>
+  <h2 id="confirmTitle">
+   Confirm public publishing
+  </h2>
+  <p class="muted" id="confirmText">
+  </p>
+  <p class="note">
+   The video will be publicly visible on the selected channel if YouTube accepts the upload.
+  </p>
+  <div class="dialog-actions">
+   <button class="secondary" id="confirmCancel" type="button">
+    Cancel
+   </button>
+   <button class="primary-button" id="confirmAccept" type="button">
+    Confirm public upload
+   </button>
+  </div>
+ </div>
+</dialog>
+
+<script>
+
+const $=id=>document.getElementById(id);let active=null,busy=false,polling=false,starting=false;const seen=new Set(), publishingNodes=new Map();const text=(id,v)=>{const node=$(id), value=String(v??'');if(node.textContent!==value)node.textContent=value};function fmt(n){n=Math.max(0,Math.floor(n||0));return [Math.floor(n/3600),Math.floor(n/60)%60,n%60].map(x=>String(x).padStart(2,'0')).join(':')}function controls(v,stopping=false){busy=v;$('start').disabled=v;$('stop').disabled=!v||stopping;for(const el of $('form').querySelectorAll('input,select'))el.disabled=v}function el(tag,value='',cls=''){const e=document.createElement(tag);e.textContent=value;e.className=cls;return e}async function post(path,data){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Local-UI':'1'},body:JSON.stringify(data)});const j=await r.json();if(!r.ok)throw Error(j.error);return j}function reset(id){active=id;seen.clear();publishingNodes.clear();$('clips').replaceChildren();$('empty').classList.remove('hidden')}function clips(s){if(active!==s.id)reset(s.id);for(const c of s.clips){if(seen.has(c.video)){const p=publishingNodes.get(c.video);if(p&&c.publishing)p.textContent='Publishing: '+c.publishing.state+(c.publishing.visibility?' · '+c.publishing.visibility:'')+(c.publishing.message?' · '+c.publishing.message:'');continue;}seen.add(c.video);const card=el('article','','clip'),video=el('video');video.src=c.video;video.controls=true;video.preload='none';video.playsInline=true;video.setAttribute('aria-label',c.title||'Generated highlight');const body=el('div','','clipbody');body.append(el('span',`#${seen.size} · AI score ${c.score}/100`,'score'),el('h3',c.title),el('p',`${fmt(c.start)} – ${fmt(c.end)} · ${Math.round(c.output_duration??(c.end-c.start))} sec`,'muted'));const d=el('div','','downloads');for(const [name,url,cls] of [['Download MP4',c.video,'download primary'],['SRT',c.subtitle,'download']]){if(!url)continue;const a=el('a',name,cls);a.href=url;a.download=url.split('/').pop();d.append(a)}if(c.edit_style==='dynamic')body.append(el('p',`${c.jump_cuts} pause cuts · ${c.shot_count} shots · ${c.removed_seconds}s trimmed`,'hook'));body.append(d);if(c.edit_style==='gaming'){body.append(el('p',(c.facecam?'Facecam split':'Full gameplay')+' · '+c.jump_cuts+' cuts','hook'));const pub=el('p',c.publishing?'Publishing: '+c.publishing.state:'Exported · waiting for publishing if enabled','note');publishingNodes.set(c.video,pub);body.append(pub);addPublishing(body,c);} card.append(video,body);$('clips').append(card)}const waiting=s.state==='running'&&!s.clips.length;$('empty').classList.toggle('hidden',s.clips.length>0||waiting);$('clipSkeleton').classList.toggle('hidden',!waiting);text('clipCount',`${s.clips.length} ready`)}function bar(id,running,pct){const b=$(id);if(pct==null&&running)b.removeAttribute('aria-valuenow');else b.setAttribute('aria-valuenow',String(pct??0));b.classList.toggle('indeterminate',running&&pct==null);b.firstElementChild.style.width=pct==null?'0%':`${pct}%`;if(running&&pct==null)b.firstElementChild.style.width='34%'}async function poll(){if(polling||starting)return;polling=true;try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw Error('Local server unavailable');const s=await r.json();if(starting||!s.id)return;const running=s.state==='running';controls(running,s.capture==='stopping');$('livePill').dataset.state=s.state;text('state',running?(s.capture==='stopping'?'Finishing':'Running'):s.state==='done'?'Complete':s.state==='stopped'?'Stopped':'Failed');$('livePill').classList.toggle('live',running&&s.capture==='live');text('sourceTitle',s.title||'Session overview');text('sourceMode',s.mode==='live'?'LIVE NOW':s.mode==='replay'?'REPLAY':'AUTO DETECT');text('elapsed',fmt(s.elapsed));text('segments',`${s.segments_processed} / ${s.segments_ready}`);text('queued',Math.max(0,s.segments_ready-s.segments_processed-(['analyze','transcribe','export'].includes(s.stage)&&running?1:0)));text('ready',`${s.clips.length}${s.target?' / '+s.target:''}`);text('capture',({connecting:'Connecting',downloading:'Downloading full replay (fallback)',smart:'Smart Replay · selective downloads',live:'Receiving live video',replay:'Reading replay from beginning',stopping:'Closing capture',ended:'Capture ended'})[s.capture]||s.capture);text('stage',({source:'Waiting for segment',transcribe:'Transcribing speech',analyze:'Finding best moments',export:'Rendering clip',publish:'Public publishing',done:'Complete'})[s.stage]||s.stage);bar('captureBar',running&&['live','replay','downloading','smart'].includes(s.capture),null);bar('processBar',running&&s.stage!=='source',running?s.progress:s.state==='done'?100:0);text('message',s.message);text('scanProgress',s.source_progress==null?'Live / unknown duration':`${s.source_progress}% of source analysed${s.overall_eta?' · Full scan ETA ~'+s.overall_eta:''}`);bar('scanBar',false,s.source_progress??0);text('eta',running?`Stage estimate: ${s.eta}${s.last_segment_seconds!=null?' · Last segment processing: '+s.last_segment_seconds+'s':''}`:'Session ended. All exported clips remain available.');text('logs',s.logs||'Connecting…');clips(s);if(s.state==='failed')text('error',s.message||'Session failed. Expand technical logs for details.');}catch(e){text('error',e.message)}finally{polling=false}}$('smart_replay').onchange=()=>{if($('smart_replay').checked)$('native_fallback').checked=false;};$('native_fallback').onchange=()=>{if($('native_fallback').checked)$('smart_replay').checked=false;};$('source_type').onchange=()=>{const local=$('source_type').value==='local';$('urlField').classList.toggle('hidden',local);$('localField').classList.toggle('hidden',!local);$('nativeField').classList.toggle('hidden',local);$('smartField').classList.toggle('hidden',local);$('authField').classList.toggle('hidden',local);$('url').required=!local;$('local_path').required=local;};$('form').onsubmit=async e=>{e.preventDefault();if(busy||starting)return;text('error','');starting=true;controls(true,true);try{const data={source_type:$('source_type').value,source_auth:$('source_auth').value,local_path:$('local_path').value,smart_replay:$('smart_replay').checked,native_fallback:$('native_fallback').checked,edit_style:$('edit_style').value,streamer:$('streamer').value,game:$('game').value,face_region:$('face_region').value,auto_public:$('auto_public').checked,analytics_refresh:$('analytics_refresh').checked,public_confirm:$('public_confirm').checked,audience:$('audience').value,daily_limit:Number($('daily_limit').value),channel_id:channelInfo?.id||'',mode:$('source_type').value==='local'?'replay':$('mode').value,url:$('url').value,authorized:$('authorized').checked,layout:$('layout').value,language:$('language').value,captions:$('captions').checked,keep_source:$('keep_source').checked};for(const k of ['count','segment','minutes','score'])data[k]=Number($(k).value);if(data.auto_public&&(!channelInfo||!data.public_confirm||!data.audience||data.edit_style!=='gaming'))throw Error('Verify channel, select audience, and confirm public upload in Gaming Pro mode.');if(data.auto_public&&!await confirmPublic('Start automatic PUBLIC uploads to '+channelInfo.title+'?')){controls(false);return;}const s=await post('/api/start',data);reset(s.id);starting=false;await poll()}catch(e){text('error',e.message);controls(false)}finally{starting=false}};$('stop').onclick=async()=>{try{$('stop').disabled=true;await post('/api/stop',{});await poll()}catch(e){text('error',e.message)}};
+let channelInfo=null;
+$('channelRefresh').onclick=async()=>{const button=$('channelRefresh');button.disabled=true;button.setAttribute('aria-busy','true');text('channelStatus','Checking channel…');try{const r=await fetch('/api/channel',{cache:'no-store'}),j=await r.json();if(!r.ok)throw Error(j.error);channelInfo=j;text('channelStatus',j.title+' · '+j.id)}catch(e){channelInfo=null;text('channelStatus',e.message)}finally{button.disabled=false;button.removeAttribute('aria-busy')}};
+function addPublishing(body,c){
+ if(c.hook)body.append(el('p','Hook: '+c.hook,'hook'));if(c.reason)body.append(el('p',c.reason,'note'));
+ const panel=el('details');panel.append(el('summary','Review & upload publicly'));
+ const title=el('input');title.setAttribute('aria-label','YouTube title');title.value=c.title||'';title.maxLength=100;
+ const desc=el('textarea');desc.setAttribute('aria-label','Description and hashtags');desc.value=[c.description||'',c.source_url?'Source: '+c.source_url:'',(c.hashtags||[]).join(' ')].filter(Boolean).join('\n\n');
+ const audience=el('select');audience.setAttribute('aria-label','Video audience');for(const [value,label] of [['','Choose audience'],['false','Not made for kids'],['true','Made for kids']]){const option=el('option',label);option.value=value;audience.append(option)}
+ const check=el('input');check.type='checkbox';const checkLabel=el('label','','check');checkLabel.append(check,document.createTextNode('I reviewed this clip and have the rights to publish it.'));
+ const btn=el('button','Upload public Short','publish');btn.type='button';const msg=el('p','','channel-msg');msg.setAttribute('role','status');
+ panel.append(el('label','Title'),title,el('label','Description & hashtags'),desc,el('label','Audience'),audience,checkLabel,btn,msg);body.append(panel);
+ btn.onclick=async()=>{if(!channelInfo){msg.textContent='Check your connected channel first.';$('channel').scrollIntoView({block:'start'});return}if(!check.checked||!audience.value){msg.textContent='Confirm rights and choose audience.';return}if(!await confirmPublic('Upload PUBLICLY to '+channelInfo.title+'?'))return;btn.disabled=true;msg.textContent='Uploading…';try{const j=await post('/api/upload',{video:c.video,title:title.value,description:desc.value,approved:true,made_for_kids:audience.value==='true',channel_id:channelInfo.id});msg.textContent='Publishing: '+j.state+' ';if(!j.url){btn.disabled=false;return;}const a=el('a','Open YouTube');a.href=j.url;a.target='_blank';a.rel='noopener noreferrer';msg.append(a)}catch(e){msg.textContent=e.message;btn.disabled=false}};
+}
+// Shared, presentation-only controls. Existing endpoints and request payloads are unchanged.
+function confirmPublic(message){
+ const dialog=$('confirmDialog');if(!dialog.showModal)return Promise.resolve(window.confirm(message));
+ if(dialog.open)return Promise.resolve(false);
+ text('confirmText',message);dialog.returnValue='cancel';
+ return new Promise(resolve=>{dialog.addEventListener('close',()=>resolve(dialog.returnValue==='accept'),{once:true});dialog.showModal();$('confirmCancel').focus();});
+}
+$('confirmCancel').onclick=()=>$('confirmDialog').close('cancel');$('confirmAccept').onclick=()=>$('confirmDialog').close('accept');
+const themeMedia=window.matchMedia('(prefers-color-scheme: dark)');let themeChoice=null;
+try{themeChoice=localStorage.getItem('shorts-studio-theme')}catch(e){}
+function applyTheme(){const value=themeChoice==='dark'||themeChoice==='light'?themeChoice:themeMedia.matches?'dark':'light';document.documentElement.dataset.theme=value;$('themeToggle').setAttribute('aria-label',value==='dark'?'Switch to light theme':'Switch to dark theme');$('themeToggle').title=$('themeToggle').getAttribute('aria-label');}
+$('themeToggle').onclick=()=>{themeChoice=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('shorts-studio-theme',themeChoice)}catch(e){}applyTheme()};
+if(themeMedia.addEventListener)themeMedia.addEventListener('change',applyTheme);applyTheme();
+// Restore the correct visible source fields on reload (including browser-restored forms).
+$('source_type').onchange();
+// Keep the form usable on small screens when a required field is inside a collapsed group.
+$('form').addEventListener('invalid',event=>{const details=event.target.closest('details');if(details)details.open=true},true);
+poll();setInterval(poll,1500);
+
+</script></body></html>

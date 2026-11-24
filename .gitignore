@@ -1,0 +1,31 @@
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated files
+output/
+downloads/
+temp/
+*.mp4
+*.mkv
+*.webm
+*.log
+*.zip
+
+# Credentials
+.env
+client_secrets*.json
+token*.json
+cookies*.txt
+
+# macOS
+.DS_Store
+
+# Backup files
+backup*/
+*.bak
+
