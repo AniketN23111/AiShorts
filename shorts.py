@@ -32,6 +32,16 @@ def duration(source):
 
 
 def transcribe(source, work, model, language):
+    if os.getenv('SHORTS_VIRAL_SESSION')=='1':
+        from viral import words_for
+        words=words_for(source,model,language)
+        groups=[]
+        for w in words:
+            if not groups or w['start']-groups[-1]['end']>.7 or w['end']-groups[-1]['start']>7:
+                groups.append({'start':w['start'],'end':w['end'],'text':w['word'],'words':[w]})
+            else:
+                groups[-1]['end']=w['end']; groups[-1]['text']+=' '+w['word']; groups[-1]['words'].append(w)
+        return groups
     import mlx_whisper
     audio = work / 'audio.wav'
     run(['ffmpeg', '-v', 'error', '-y', '-fflags', '+discardcorrupt', '-err_detect', 'ignore_err', '-i', str(source), '-map', '0:a:0',

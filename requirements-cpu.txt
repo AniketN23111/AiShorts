@@ -1,0 +1,2 @@
+# Optional CPU fallback for Viral presets. Install separately on your M4.
+faster-whisper>=1.1,<2

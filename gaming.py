@@ -125,7 +125,7 @@ def render(source,dest,segments,clip,software=False,region=None):
             hot=a<=impact<=b and x<=impact+1.3 and y>=impact
             # Preserve the entire gameplay frame incl. HUD using a blurred fill behind it.
             grade='eq=contrast=1.035:saturation=1.06,unsharp=5:5:0.25:5:5:0'
-            gh=960
+            gh=1344; fh=576
             shake="+2*sin(2*PI*t*7)" if hot else ''
             # Hide only the detected webcam area on the gameplay panel. The original
             # game underneath an embedded camera cannot be recovered.
@@ -138,7 +138,7 @@ def render(source,dest,segments,clip,software=False,region=None):
                     import statistics
                     cx=statistics.median(f[1]+f[3]/2 for f in track); cy=statistics.median(f[2]+f[4]/2 for f in track)
                     cx=max(rx+rw*.25,min(rx+rw*.75,cx)); cy=max(ry+rh*.25,min(ry+rh*.75,cy))
-                zoom=.88 if hot else 1.; cw=min(rw,rh*h/w*1080/960)*zoom; ch=cw*w/h*960/1080
+                zoom=.88 if hot else 1.; cw=min(rw,rh*h/w*1080/fh)*zoom; ch=cw*w/h*fh/1080
                 # Smooth linear recentering; clamp to the actual camera region.
                 if len(track)>=4:
                     import statistics
@@ -151,7 +151,7 @@ def render(source,dest,segments,clip,software=False,region=None):
                 else:
                     pw,ph=min(mw,even(cw*w)),min(mh,even(ch*h)); px=max(mx,min(mx+mw-pw,int(cx*w-pw/2)))//2*2; py=max(my,min(my+mh-ph,int(cy*h-ph/2)))//2*2
                     face=f'crop={pw}:{ph}:{px}:{py}'
-                graph=f'[0:v]{grade},split[cam][game];[cam]{face},scale=1080:960,setsar=1[c];'+gameplay+';[g][c]vstack=inputs=2,fps=30[v]'
+                graph=f'[0:v]{grade},split[cam][game];[cam]{face},scale=1080:{fh},setsar=1[c];'+gameplay+';[g][c]vstack=inputs=2,fps=30[v]'
             p=root/f'shot{i:03}.mp4'; shots.append(p)
             base=['ffmpeg','-v','error','-y','-ss',str(x),'-i',str(source),'-t',str(y-x),'-filter_complex_threads','2','-filter_complex',graph,'-map','[v]','-map','0:a:0','-af',f'highpass=f=65,acompressor=threshold=0.10:ratio=2.5:attack=15:release=180,alimiter=limit=0.89:level=false,afade=t=in:d=0.015,afade=t=out:st={max(0,y-x-.015):.3f}:d=0.015','-ar','48000','-ac','2','-pix_fmt','yuv420p','-threads','4','-c:a','aac','-b:a','160k']
             if not software:
@@ -160,7 +160,7 @@ def render(source,dest,segments,clip,software=False,region=None):
             subprocess.run(base+['-c:v','libx264','-preset','veryfast','-crf','20',str(p)],check=True,timeout=180)
         manifest=root/'shots.txt'; manifest.write_text(''.join(f"file '{p.name}'\n" for p in shots))
         subprocess.run(['ffmpeg','-v','error','-y','-f','concat','-safe','1','-i',str(manifest),'-c:v','copy','-af','loudnorm=I=-16:TP=-1.5:LRA=11','-ar','48000','-c:a','aac','-b:a','160k','-movflags','+faststart',str(dest)],check=True,timeout=120)
-    return {'edit_style':'gaming','facecam':True,'layout':'gameplay_top_streamer_bottom','layout_version':2,'jump_cuts':len(holes),'shot_count':len(pieces),'removed_seconds':round(sum(y-x for x,y in holes),2),'output_duration':round(duration(dest),2)}
+    return {'edit_style':'gaming','facecam':True,'layout':'gameplay_top_streamer_bottom','layout_version':3,'gameplay_height':1344,'facecam_height':576,'jump_cuts':len(holes),'shot_count':len(pieces),'removed_seconds':round(sum(y-x for x,y in holes),2),'output_duration':round(duration(dest),2),'edit_pieces':pieces}
 
 
 def verify_visual_range(preview,media,start,length):

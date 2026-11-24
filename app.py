@@ -31,11 +31,15 @@ def validate(data):
     mode=data.get('mode','auto')
     if not (0<=count<=100 and 0<=minutes<=720 and segment in (60,120,180) and 0<=score<=100 and layout in ('original','fit','crop') and language in ('','en','hi','mr') and mode in ('auto','live','replay')):
         raise ValueError('Invalid clip settings.')
+    from viral import PRESETS, CAPTIONS
+    if data.get('viral_preset','') not in ('',*PRESETS) or data.get('viral_captions','off') not in CAPTIONS: raise ValueError('Invalid viral preset or caption style.')
     if data.get('face_region'):
         from auto_publish import parse_region
         parse_region(data['face_region'])
     if data.get('auto_public') is True:
-        if data.get('edit_style')!='gaming' or not data.get('channel_id') or data.get('audience') not in ('yes','no') or data.get('public_confirm') is not True or not 1<=int(data.get('daily_limit',6))<=30: raise ValueError('Public publishing requires gaming mode, verified channel, audience, consent and daily limit.')
+        if (data.get('edit_style')!='gaming' and not data.get('viral_preset')) or not data.get('channel_id') or data.get('audience') not in ('yes','no') or data.get('public_confirm') is not True or not 1<=int(data.get('daily_limit',6))<=30: raise ValueError('Public publishing requires Gaming or Viral mode, verified channel, audience, consent and daily limit.')
+    if data.get('auto_instagram') is True:
+        if (data.get('edit_style')!='gaming' and not data.get('viral_preset')) or not re.fullmatch(r'\d+',str(data.get('instagram_account',''))) or data.get('instagram_confirm') is not True or not 1<=int(data.get('daily_limit',6))<=30: raise ValueError('Instagram requires verified professional account, explicit authorization and Gaming or Viral mode.')
     return url,count,minutes,layout,language,segment,score,mode
 
 
@@ -60,12 +64,27 @@ def start(data):
         if data.get('edit_style')=='gaming':
             cmd+=['--streamer',str(data.get('streamer',''))[:80],'--game',str(data.get('game',''))[:80]]
             if data.get('face_region'): cmd+=['--face-region',data['face_region']]
-        if data.get('analytics_refresh') is True and data.get('channel_id'):
-            cmd+=['--analytics-refresh']
+        if data.get('viral_preset'):
+            cmd+=['--viral-preset',data['viral_preset'],'--viral-captions',data.get('viral_captions','off')]
+            if data.get('viral_overlays') is True: cmd+=['--viral-overlays']
+            if data.get('viral_variants') is True: cmd+=['--viral-variants']
+            if data.get('viral_full_scan') is True: cmd+=['--viral-full-scan']
+        feedback_channel=data.get('feedback_channel') or data.get('channel_id')
+        if feedback_channel:
+            cmd+=['--feedback-channel',str(feedback_channel)[:100]]
+            if data.get('analytics_refresh') is True: cmd+=['--analytics-refresh']
+        if data.get('software') is True: cmd+=['--software']
         if data.get('auto_public') is True:
             import publisher
             if publisher.channel(publisher.service())['id']!=data['channel_id']: raise ValueError('Connected channel changed.')
             cmd+=['--publish-channel',data['channel_id'],'--made-for-kids',data['audience'],'--daily-limit',str(int(data.get('daily_limit',6)))]
+        if data.get('auto_instagram') is True:
+            from instagram_publisher import account, InstagramError
+            try: ig=account()
+            except InstagramError as exc: raise ValueError(str(exc)) from None
+            if ig['id']!=data['instagram_account']: raise ValueError('Instagram account changed.')
+            cmd+=['--instagram-account',ig['id']]
+            if data.get('auto_public') is not True: cmd+=['--daily-limit',str(int(data.get('daily_limit',6)))]
         if data.get('smart_replay') is True: cmd+=['--smart-replay']
         elif data.get('native_fallback') is True: cmd+=['--native-fallback']
         if data.get('source_type','youtube')=='youtube' and data.get('source_auth')=='chrome': cmd+=['--browser','chrome']
@@ -100,6 +119,13 @@ def status(job):
             name=clip.get('file','')
             if re.fullmatch(r'short_\d+\.mp4',name) and (manifest.parent/name).is_file():
                 clips.append({**clip,'video':f'/media/{job["id"]}/{manifest.parent.name}/{name}','subtitle':f'/media/{job["id"]}/{manifest.parent.name}/{Path(name).stem}.srt' if (manifest.parent/Path(name).with_suffix('.srt')).exists() else None})
+    for clip in clips:
+        if clip.get('viral'):
+            base=clip['video'].rsplit('/',1)[0]+'/'
+            clip['variations']=[{**v,'video':base+v['file']} for v in clip.get('variations',[]) if re.fullmatch(r'short_\d+_alt\.mp4',v.get('file',''))]
+            if clip.get('thumbnail_file'): clip['thumbnail']=base+clip['thumbnail_file']
+            words=OUTPUT/job['id']/clip['video'].split('/')[-2]/(Path(clip['file']).stem+'_words.json')
+            if words.is_file(): clip['words_url']=base+words.name
     logs=[]
     for name in ('run.log','capture.log','download.log'):
         p=folder/name
@@ -129,21 +155,78 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed(): return self.reply({'error':'Invalid host'},403)
         path=unquote(urlsplit(self.path).path)
         if path == '/api/status': return self.reply(current())
+        if path == '/api/analytics':
+            from publisher import CONFIG
+            file=CONFIG/'analytics-feedback.json'
+            try: return self.reply(json.loads(file.read_text()) if file.exists() else {'sample':[],'summary':'No analytics collected.'})
+            except (OSError,ValueError): return self.reply({'error':'Cannot read local analytics cache.'},400)
+        if path == '/api/instagram':
+            try:
+                from instagram_publisher import account
+                return self.reply(account())
+            except Exception: return self.reply({'error':'Instagram not connected or unavailable. Run python instagram_publisher.py connect in Terminal.'},400)
         if path == '/api/channel':
             try:
                 import publisher
                 return self.reply(publisher.channel(publisher.service()))
             except Exception: return self.reply({'error':'Channel not connected or unavailable. Run python publisher.py connect in Terminal.'},400)
         if path == '/': return self.file(ROOT/'index.html','text/html; charset=utf-8')
-        m=re.fullmatch(r'/media/([0-9a-f]{32})/(\d{8}_\d{6}_\d{6})/(short_\d+\.(?:mp4|srt))',path)
+        m=re.fullmatch(r'/media/([0-9a-f]{32})/(\d{8}_\d{6}_\d{6})/(short_\d+(?:\.(?:mp4|srt)|_alt\.mp4|_review\.mp4|_words\.json|_thumb\.jpg))',path)
         if m:
             p=OUTPUT.joinpath(*m.groups())
-            return self.file(p,'video/mp4' if p.suffix=='.mp4' else 'application/octet-stream')
+            return self.file(p,'video/mp4' if p.suffix=='.mp4' else 'application/json' if p.suffix=='.json' else 'image/jpeg' if p.suffix=='.jpg' else 'application/octet-stream')
         return self.reply({'error':'Not found'},404)
     def do_POST(self):
         if not self.allowed() or self.headers.get('Origin') != 'http://'+HOST or self.headers.get('X-Local-UI') != '1':
             return self.reply({'error':'Invalid local request'},403)
         try:
+            if self.path == '/api/analytics/import':
+                n=int(self.headers.get('Content-Length','0'))
+                if not 0<n<=500000: raise ValueError('Invalid CSV request size.')
+                data=json.loads(self.rfile.read(n)); from analytics_feedback import import_csv
+                return self.reply(import_csv(str(data.get('channel_id','')),str(data.get('csv',''))))
+            if self.path == '/api/analytics/refresh':
+                try:
+                    from analytics_feedback import refresh
+                    refresh()
+                    return self.reply({'ok':True})
+                except Exception: return self.reply({'error':'Analytics refresh failed. Check the analytics OAuth scope and YouTube Analytics API.'},400)
+            if self.path == '/api/captions/review':
+                n=int(self.headers.get('Content-Length','0'))
+                if not 0<n<=150000: raise ValueError('Invalid caption request size.')
+                data=json.loads(self.rfile.read(n))
+                m=re.fullmatch(r'/media/([0-9a-f]{32})/(\d{8}_\d{6}_\d{6})/(short_\d+\.mp4)',str(data.get('video','')))
+                if not m: raise ValueError('Invalid clip path.')
+                path=OUTPUT.joinpath(*m.groups()); master=path.with_name(path.stem+'_master.mp4'); original=path.with_name(path.stem+'_words.json')
+                if not master.is_file() or not original.is_file(): raise ValueError('No editable caption master exists.')
+                words=json.loads(original.read_text()); edits=data.get('words')
+                if not isinstance(edits,list) or len(edits)!=len(words) or any(not isinstance(w,str) or not w.strip() or len(w)>80 for w in edits): raise ValueError('Provide one nonempty correction per original timed word.')
+                for w,value in zip(words,edits): w['word']=value
+                clip=next((c for c in json.loads((path.parent/'clips.json').read_text()) if c.get('file')==path.name),None)
+                if not clip: raise ValueError('Clip not found.')
+                from viral import decorate,validate_export
+                dest=path.with_name(path.stem+'_review.mp4'); pending=dest.with_name('pending_'+dest.name)
+                with LOCK:
+                    if ACTIVE and ACTIVE['proc'].poll() is None: raise ValueError('Wait for active processing to finish before rendering caption corrections.')
+                    try:
+                        decorate(master,pending,words,clip,clip['caption_style'],clip.get('overlays',False),False)
+                        validate_export(pending,words,clip['caption_style']); os.replace(pending,dest)
+                    finally: pending.unlink(missing_ok=True)
+                return self.reply({'video':data['video'].rsplit('/',1)[0]+'/'+dest.name})
+            if self.path == '/api/instagram/upload':
+                n=int(self.headers.get('Content-Length','0'))
+                if not 0<n<=16384: raise ValueError('Invalid request size.')
+                data=json.loads(self.rfile.read(n))
+                m=re.fullmatch(r'/media/([0-9a-f]{32})/(\d{8}_\d{6}_\d{6})/(short_\d+\.mp4)',str(data.get('video','')))
+                if not m or data.get('approved') is not True or not re.fullmatch(r'\d+',str(data.get('account_id',''))): raise ValueError('Confirm clip rights and verified Instagram account.')
+                path=OUTPUT.joinpath(*m.groups()); manifest=path.parent/'clips.json'
+                if not path.is_file() or not manifest.is_file(): raise ValueError('Clip not found.')
+                clip=next((c for c in json.loads(manifest.read_text()) if c.get('file')==path.name),None)
+                if not clip or (clip.get('edit_style')!='gaming' and not (clip.get('viral') and clip.get('quality'))): raise ValueError('Instagram requires a validated Gaming or Viral export.')
+                from instagram_publisher import publish, InstagramError
+                from types import SimpleNamespace
+                try: return self.reply(publish(path,clip,SimpleNamespace(authorized=True,score=85,instagram_account=data['account_id'],daily_limit=6),caption=data.get('caption')))
+                except InstagramError as exc: return self.reply({'error':str(exc)},502)
             if self.path == '/api/upload':
                 n=int(self.headers.get('Content-Length','0'))
                 if not 0<n<=16384: raise ValueError('Invalid request size.')
@@ -157,7 +240,7 @@ class Handler(BaseHTTPRequestHandler):
                 if data.get('approved') is not True or type(data.get('made_for_kids')) is not bool or not data.get('channel_id'): raise ValueError('Confirm rights, audience and verified channel.')
                 manifest=path.parent/'clips.json'
                 clip=next((c for c in json.loads(manifest.read_text()) if c.get('file')==path.name),None) if manifest.exists() else None
-                if not clip or clip.get('edit_style')!='gaming': raise ValueError('Public publishing is available for validated Gaming Pro exports.')
+                if not clip or (clip.get('edit_style')!='gaming' and not (clip.get('viral') and clip.get('quality'))): raise ValueError('Public publishing is available for validated Gaming or Viral exports.')
                 clip={**clip,'title':data.get('title',clip['title']),'description':data.get('description',clip.get('description',''))}
                 try: return self.reply(publish(path,clip,SimpleNamespace(authorized=True,made_for_kids='yes' if data['made_for_kids'] else 'no',score=85,publish_channel=data['channel_id'],daily_limit=6)))
                 except ValueError: raise
@@ -173,7 +256,7 @@ class Handler(BaseHTTPRequestHandler):
                         (OUTPUT/ACTIVE['id']/'stop').touch()
                 return self.reply({'ok':True})
             return self.reply({'error':'Not found'},404)
-        except (ValueError, TypeError, OSError) as exc:
+        except (ValueError, TypeError, OSError, subprocess.SubprocessError) as exc:
             return self.reply({'error':str(exc)},400)
     def file(self,p,mime):
         if not p.is_file(): return self.reply({'error':'Not found'},404)

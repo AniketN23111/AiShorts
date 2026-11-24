@@ -77,6 +77,9 @@ def run_replay(args,job,out,update,stage,atomic,candidates,info):
     title,total=info
     if getattr(args,'mode','auto')=='live': raise ValueError('This is a replay, not an ongoing stream.')
     if args.minutes: total=min(total,args.minutes*60)
+    from live import configure_full_scan, publish_ranked, publishing_enabled
+    configure_full_scan(args,'replay')
+    if getattr(args,'defer_publish',False): update(target=0)
     update(title=title,mode='replay',source_duration=total,capture='smart',message='Smart replay: requesting low-resolution previews' if getattr(args,'edit_style','clean')=='gaming' else 'Smart replay: requesting audio sections only')
     clips=[]; scanned=0.; began=time.monotonic(); stopped=False
     for index,(start,boundary,end) in enumerate(windows(total,args.segment),1):
@@ -85,14 +88,18 @@ def run_replay(args,job,out,update,stage,atomic,candidates,info):
         with tempfile.TemporaryDirectory(prefix='smart-',dir=job) as temp:
             root=Path(temp)
             stage('source',f'Fetching analysis section {index}: {eta(start)}–{eta(end)}',progress=None)
-            gaming=getattr(args,'edit_style','clean')=='gaming'
+            viral=bool(getattr(args,'viral_preset',''))
+            gaming=getattr(args,'edit_style','clean')=='gaming' or viral
             audio=fetch(args,job,root/'audio',start,end,'preview' if gaming else True)
             if audio is None: stopped=True; break
             work=root/'asr'; work.mkdir()
             stage('transcribe',f'Transcribing audio section {index}',progress=None)
             seg=transcribe(audio,work,args.whisper,args.language or None)
             stage('analyze',f'Finding highlights in audio section {index}',progress=None)
-            if gaming:
+            if viral:
+                from viral import select as viral_select
+                selected=viral_select(args,audio,seg,min(end-start,duration(audio)),boundary-start,start,clips,args.count-len(clips) if args.count else 0)
+            elif gaming:
                 from live import gaming_candidates
                 selected=gaming_candidates(args,audio,seg,min(end-start,duration(audio)),boundary-start,start,clips,args.count-len(clips) if args.count else 0)
             else:
@@ -124,7 +131,13 @@ def run_replay(args,job,out,update,stage,atomic,candidates,info):
                 stage('export',f'Editing highlight {len(clips)+1}',progress=None)
                 name=f'short_{len(clips)+1:02}.mp4'; pending=out/('pending_'+name); dest=out/name
                 meta={}
-                if gaming:
+                if viral:
+                    from viral import render as viral_render
+                    local['impact']=c.get('impact',-1)-c['start'] if c.get('impact',-1)>=0 else -1
+                    try: meta=viral_render(args,media,pending,subs,local)
+                    except ValueError as exc:
+                        pending.unlink(missing_ok=True); print('Skipping viral candidate: '+str(exc),flush=True); continue
+                elif gaming:
                     from gaming import render as gaming_render, SplitLayoutUnavailable
                     local['impact']=c.get('impact',-1)-c['start'] if c.get('impact',-1)>=0 else -1
                     try:
@@ -142,7 +155,7 @@ def run_replay(args,job,out,update,stage,atomic,candidates,info):
                 if pending.with_suffix('.srt').exists(): os.replace(pending.with_suffix('.srt'),dest.with_suffix('.srt'))
                 clips.append({**c,'start':a,'end':b,'file':name,**meta,'source_url':args.url,'source_strategy':'visual_preview' if gaming else 'audio_first','source_identity':getattr(args,'source_identity','')})
                 atomic(out/'clips.json',clips)
-                if getattr(args,'publish_channel',''):
+                if publishing_enabled(args) and not getattr(args,'defer_publish',False):
                     from live import publish_ready
                     stage('publish',f'Publishing highlight {len(clips)}',progress=None)
                     publish_ready(args,dest,clips[-1]); atomic(out/'clips.json',clips)
@@ -153,4 +166,5 @@ def run_replay(args,job,out,update,stage,atomic,candidates,info):
             scanned=end
             update(segments_processed=index,captured_seconds=round(scanned),source_progress=round(100*scanned/total,1),overall_eta=eta((total-scanned)*(time.monotonic()-began)/scanned) if not args.count else None,message=f'Audio section {index} analysed; {len(clips)} highlights ready',last_segment_seconds=round(time.monotonic()-window_began))
             if args.count and len(clips)>=args.count: break
+    if not stopped: publish_ranked(args,out,clips,stage)
     update(stage='done',capture='ended',message=f'{len(clips)} highlights ready'+(' (stopped)' if stopped else ''),progress=100,eta='00:00:00',overall_eta=None)

@@ -46,6 +46,11 @@ def ledger():
         def save(): publisher.secure_write(file,json.dumps(records,ensure_ascii=False,indent=2))
         yield records,save
 
+def near_duplicate(a,b):
+    if not isinstance(a,list) or not isinstance(b,list) or len(a)!=5 or len(b)!=5: return False
+    try: return all((int(x,16)^int(y,16)).bit_count()<=5 for x,y in zip(a,b))
+    except (ValueError,TypeError): return False
+
 def publish(path,clip,args):
     from googleapiclient.http import MediaFileUpload
     if not args.authorized or args.made_for_kids not in ('yes','no') or clip['score']<args.score: raise ValueError('Publishing permission, audience or score gate not satisfied')
@@ -62,12 +67,13 @@ def publish(path,clip,args):
         for r in records:
             if r['channel']!=ch['id']: continue
             same=r['sha256']==key or (source and r.get('source')==source and min(b,r['end'])-max(a,r['start'])>0.5)
+            if not same and abs(float(r.get('duration',0))-q['duration'])<=2: same=near_duplicate(r.get('fingerprint'),clip.get('fingerprint'))
             if same: return {'state':'duplicate' if r['state']=='uploaded' else 'uncertain','id':r.get('id'),'message':'Existing or unresolved upload; no duplicate request sent'}
         if any(r['channel']==ch['id'] and r['title'].casefold()==title.casefold() for r in records): return {'state':'title_duplicate','message':'Title already used; edit the title before manually publishing.'}
         if sum(r['channel']==ch['id'] and r['day']==day for r in records)>=args.daily_limit: return {'state':'limit','message':'Daily upload limit reached'}
         # Persist intent before sending. Never replay an ambiguous completed upload.
-        record={'channel':ch['id'],'sha256':key,'source':source,'start':a,'end':b,'day':day,'state':'pending','title':title,'duration':q['duration'],'score':clip['score'],'path':str(path),'quality':q};records.append(record);save()
-        request=api.videos().insert(part='snippet,status',body={'snippet':{'title':title,'description':desc.encode('utf-8')[:5000].decode('utf-8','ignore'),'tags':tags,'categoryId':'20'},'status':{'privacyStatus':'public','selfDeclaredMadeForKids':args.made_for_kids=='yes'}},media_body=MediaFileUpload(str(path),mimetype='video/mp4',chunksize=8*1024*1024,resumable=True))
+        record={'channel':ch['id'],'sha256':key,'source':source,'start':a,'end':b,'day':day,'state':'pending','title':title,'duration':q['duration'],'score':clip['score'],'path':str(path),'quality':q,'viral_style':clip.get('viral_style'),'ratings':clip.get('ratings'),'caption_style':clip.get('caption_style'),'hook':clip.get('hook'),'cta':clip.get('cta'),'fingerprint':clip.get('fingerprint')};records.append(record);save()
+        request=api.videos().insert(part='snippet,status',body={'snippet':{'title':title,'description':desc.encode('utf-8')[:5000].decode('utf-8','ignore'),'tags':tags,'categoryId':{'gaming':'20','education':'27','entertainment':'24','people':'22'}.get(clip.get('category'),'20')},'status':{'privacyStatus':'public','selfDeclaredMadeForKids':args.made_for_kids=='yes'}},media_body=MediaFileUpload(str(path),mimetype='video/mp4',chunksize=8*1024*1024,resumable=True))
         try:
             response=None
             while response is None: _,response=request.next_chunk(num_retries=4)

@@ -1,31 +1,25 @@
-
-# Python
 .venv/
 venv/
 __pycache__/
-*.pyc
+*.py[cod]
 .pytest_cache/
-
-# Generated files
 output/
 downloads/
 temp/
 *.mp4
 *.mkv
 *.webm
+*.wav
 *.log
 *.zip
-
-# Credentials
 .env
+.env.*
 client_secrets*.json
 token*.json
 cookies*.txt
-
-# macOS
 .DS_Store
-
-# Backup files
 backup*/
 *.bak
 
+instagram-token.json
+instagram-uploads.json

@@ -49,10 +49,10 @@ class GamingTests(unittest.TestCase):
             cam={'region':region,'track':[(i/2,.75,.16,.07,.13) for i in range(32)]}
             with patch.object(gaming,'sample',return_value=(frames,cam)):
                 meta=gaming.render(source,dest,[dict(start=0,end=16,text='Speech')],dict(start=0,end=16,impact=6),True,region)
-            self.assertTrue(meta['facecam']); self.assertEqual(meta['layout'],'gameplay_top_streamer_bottom'); self.assertFalse(dest.with_suffix('.srt').exists());self.assertGreater(auto_publish.quality(dest)['duration'],15)
+            self.assertTrue(meta['facecam']); self.assertEqual((meta['gameplay_height'],meta['facecam_height']),(1344,576)); self.assertEqual(meta['layout'],'gameplay_top_streamer_bottom'); self.assertFalse(dest.with_suffix('.srt').exists());self.assertGreater(auto_publish.quality(dest)['duration'],15)
             cap=cv2.VideoCapture(str(dest)); cap.set(cv2.CAP_PROP_POS_MSEC,6500); ok,frame=cap.read();cap.release()
             self.assertTrue(ok);self.assertEqual(frame.shape[:2],(1920,1080))
-            top=frame[480,540];bottom=frame[1440,540]
+            top=frame[1300,540];bottom=frame[1400,540]
             self.assertGreater(int(top[0]),int(top[2])+100); self.assertGreater(int(bottom[2]),int(bottom[0])+100)
             # The webcam area is removed from the gameplay panel, not duplicated.
             self.assertLess(int(frame[450,850,2]),100)

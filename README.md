@@ -1,3 +1,11 @@
+# V11 — YouTube + Instagram Reels
+
+See [V11_SETUP.md](V11_SETUP.md) for the 70/30 Gaming Pro layout, Instagram connection and upgrade instructions. Earlier setup guides describe historical releases.
+
+# V10 Viral Studio update
+
+See [V10_SETUP.md](V10_SETUP.md) for new features, upgrade instructions, configuration, quality gates and limitations. The rest of this README documents the preserved original workflow.
+
 # AI Shorts Studio V8 — start here
 
 Read [V8_SETUP.md](V8_SETUP.md) for the current installation, Gaming Pro and PUBLIC upload workflow. The older notes below are retained for legacy modes; their private-only instructions no longer apply to the dashboard.

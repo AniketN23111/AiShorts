@@ -3,7 +3,7 @@ import math, subprocess, tempfile, re
 from pathlib import Path
 
 
-def edit_plan(segments, start, end, silence=None):
+def edit_plan(segments, start, end, silence=None, extra_holes=None):
     """Remove only interior gaps between transcript phrases; never remove dialogue.
     Gaps are estimates from ASR, not a guarantee of acoustic silence.
     Split retained ranges for restrained punch-ins, at most every ~8 seconds.
@@ -25,11 +25,18 @@ def edit_plan(segments, start, end, silence=None):
     if silence is not None:
         holes=[(max(a,x),min(b,y)) for a,b in holes for x,y in silence
                if min(b,y)-max(a,x)>=0.6]
+    # Additional cuts are only supplied by the opt-in viral editor for isolated fillers.
+    holes=sorted(holes+[(max(start+.2,a),min(end-.2,b)) for a,b in (extra_holes or []) if start+.2<a<b<end-.2])
+    merged=[]
+    for a,b in holes:
+        if merged and a<=merged[-1][1]: merged[-1]=(merged[-1][0],max(b,merged[-1][1]))
+        else: merged.append((a,b))
+    holes=merged
     # Never remove more than 20% of source duration or more than 6 gaps.
     budget=(end-start)*0.2; chosen=[]
     for a,b in holes[:6]:
         length=min(b-a,budget)
-        if length>=0.6: chosen.append((a,a+length)); budget-=length
+        if length>=0.6 or (extra_holes and (a,b) in extra_holes and length>=.12): chosen.append((a,a+length)); budget-=length
     ranges=[]; pos=start
     for a,b in chosen:
         if a-pos>0.1: ranges.append((pos,a))
