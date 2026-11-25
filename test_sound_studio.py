@@ -29,7 +29,7 @@ class SoundStudioTests(unittest.TestCase):
     def test_rank_and_beat(self):
         self.fixture();self.fixture('other.wav',freq=220);ss.import_folder(self.base)
         clip={'viral_style':'funny','impact_output':5,'story_pattern':'conversation_comedy'};p=ss.plan(clip,16,{'youtube','instagram'});q=ss.plan(clip,16,{'youtube','instagram'},previous=[p['music']['id']]);self.assertNotEqual(p['music']['id'],q['music']['id']);self.assertAlmostEqual(p['beat_aligned_event'],5,places=2)
-    def test_real_mix_and_copy_video(self):
+    def test_legacy_timeline_ignored_and_copy_video(self):
         self.fixture();self.fixture('impact.wav','sfx');ss.import_folder(self.base)
         master=self.base/'master.mp4';dest=self.base/'mix.mp4';old=self.base/'old.mp4';remix=self.base/'remix.mp4'
         subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i','testsrc2=size=1080x1920:rate=30','-f','lavfi','-i','sine=f=330:r=48000','-t','16','-c:v','libx264','-preset','ultrafast','-threads','2','-c:a','aac',str(master)],check=True,timeout=90)
@@ -38,7 +38,7 @@ class SoundStudioTests(unittest.TestCase):
         t=time.monotonic();decorate(master,dest,[],{**clip,'audio_timeline':p},'off',False,True);new=time.monotonic()-t
         t=time.monotonic();decorate(master,remix,[],{**clip,'audio_timeline':p},'off',False,True,video_base=dest);elapsed=time.monotonic()-t
         def video_hash(path):return subprocess.check_output(['ffmpeg','-v','error','-i',str(path),'-map','0:v:0','-c','copy','-f','hash','-']).strip()
-        self.assertEqual(video_hash(master),video_hash(dest));self.assertEqual(video_hash(dest),video_hash(remix));validate_export(remix,[],'off');self.assertLess(ss.measure_mix(remix)['true_peak_dbtp'],0);print(f'AUDIO BENCHMARK baseline={baseline:.3f}s director={new:.3f}s remix={elapsed:.3f}s',flush=True)
+        self.assertEqual(video_hash(master),video_hash(dest));self.assertEqual(video_hash(dest),video_hash(remix));validate_export(remix,[],'off');self.assertLess(ss.measure_mix(remix)['true_peak_dbtp'],0);print(f'AUDIO BENCHMARK baseline={baseline:.3f}s legacy_timeline_ignored={new:.3f}s copy_video={elapsed:.3f}s',flush=True)
     def test_reference_local(self):
         p=self.base/'ref.mp4';subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i','testsrc2=size=160x90:rate=10','-f','lavfi','-i','sine=f=440','-t','3','-c:v','libx264','-c:a','aac',str(p)],check=True)
         with self.assertRaises(ValueError):ss.reference(p)

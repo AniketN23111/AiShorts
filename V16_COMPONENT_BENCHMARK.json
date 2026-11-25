@@ -1,0 +1,28 @@
+{
+  "fixture": "Same synthetic 16s 1080x1920 H264/AAC normalized master, CPU mode, captions/overlays off; three decoration trials each.",
+  "platform": "linux",
+  "machine": "x86_64",
+  "results": {
+    "baseline": {
+      "seconds": [
+        0.7574,
+        0.8103,
+        0.8902
+      ],
+      "largest_child_peak_rss_mib": 93.6,
+      "median_seconds": 0.8103,
+      "audio_stream_identical": false
+    },
+    "current": {
+      "seconds": [
+        0.391,
+        0.3003,
+        0.3217
+      ],
+      "largest_child_peak_rss_mib": 93.8,
+      "median_seconds": 0.3217,
+      "audio_stream_identical": true
+    }
+  },
+  "limitations": "Component measurement only. No real stream, model inference, captions or end-to-end highlight quality comparison."
+}

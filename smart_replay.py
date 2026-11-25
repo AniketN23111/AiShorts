@@ -54,6 +54,27 @@ def fetch(args, job, folder, start, end, audio):
         event=getattr(args,'_prefetch_cancel',None)
         return (job/'stop').exists() or (event is not None and event.is_set())
     if cancelled(): return None
+    if getattr(args,'input_file',None):
+        # Local recordings are seeked in small windows instead of copied wholesale.
+        local=Path(args.input_file).expanduser().resolve()
+        dest=folder/('section.wav' if audio is True else 'section.mkv')
+        cmd=['ffmpeg','-nostdin','-v','error','-y','-ss',str(start),'-i',str(local),'-t',str(end-start)]
+        if audio is True:cmd+=['-map','0:a:0','-vn','-ac','1','-ar','16000']
+        else:
+            cmd+=['-map','0:v:0','-map','0:a:0']
+            if audio=='preview':cmd+=['-vf',"scale=-2:'min(360,ih)',fps=15",'-filter_threads','2']
+            cmd+=['-c:v','libx264','-preset','ultrafast','-crf','20' if audio=='preview' else '17','-threads','2','-c:a','aac','-b:a','96k' if audio=='preview' else '192k']
+        proc=subprocess.Popen(cmd+[str(dest)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+        began=time.monotonic()
+        try:
+            while proc.poll() is None:
+                if cancelled():return None
+                if time.monotonic()-began>180:raise RuntimeError('Local range acquisition timed out.')
+                time.sleep(.1)
+            if proc.returncode or not dest.is_file():raise RuntimeError('Could not decode selected local video range.')
+        finally:terminate(proc)
+        if abs(duration(dest)-(end-start))>max(.35,(end-start)*.01):raise RuntimeError('Local range duration mismatch.')
+        perf.count('local_preview_ranges' if audio=='preview' else 'local_candidate_ranges');return dest
     if audio=='preview' and getattr(args,'_preview_plan',None):
         from quick_range import supports_range, acquire
         if shutil.disk_usage(folder).free<2*1024**3: raise RuntimeError('Low free disk space.')
@@ -187,7 +208,7 @@ def _run_replay(args,job,out,update,stage,atomic,candidates,info,rolling):
     from live import configure_full_scan, publish_ranked, publishing_enabled
     configure_full_scan(args,'replay')
     if getattr(args,'defer_publish',False): update(target=0)
-    update(title=title,mode='replay',source_duration=total,capture='smart',message='Smart replay: requesting low-resolution previews' if getattr(args,'edit_style','clean')=='gaming' else 'Smart replay: requesting audio sections only')
+    update(title=title,mode='replay',source_duration=total,capture='smart',message='Smart replay: requesting low-resolution previews' if getattr(args,'edit_style','clean')=='gaming' or getattr(args,'viral_preset','') else 'Smart replay: requesting audio sections only')
     clips=[]; scanned=0.; began=time.monotonic(); stopped=False
     for index,(start,boundary,end) in enumerate(windows(total,args.segment,min(90,250-args.segment) if getattr(args,'processing_mode',None) and getattr(args,'viral_preset','') else 65),1):
         if not wait_if_paused(job,update): stopped=True; break
@@ -224,18 +245,30 @@ def _run_replay(args,job,out,update,stage,atomic,candidates,info,rolling):
                 # Re-transcribe the actual acquired audiovisual range; captions and cuts
                 # must use the local clip clock, not the remote audio seek clock.
                 stage('source',f'Fetching selected highlight {len(clips)+1}',progress=None)
-                media=fetch(args,job,root/f'clip{j}',a,b,False)
-                if media is None: stopped=True; break
-                local_work=root/f'caption{j}';local_work.mkdir()
-                stage('transcribe','Checking dialogue in selected video',progress=None)
-                subs=[]
-                if rolling and args.processing_mode in ('fast','smart') and any(s.get('words') for s in seg if s['end']>c['start'] and s['start']<c['end']):
-                    actual_length=duration(media)
-                    delta=perf.audio_alignment(audio,media,c['start'],min(b-a,actual_length))
-                    subs=perf.aligned_segments(seg,c['start'],c['end'],delta,actual_length)
+                local_source=getattr(args,'input_file',None)
+                source_clock=0.; subs=[]
+                # A known local source can render directly, but only with verified preview alignment.
+                if local_source and rolling and args.processing_mode in ('fast','smart') and any(s.get('words') for s in seg if s['end']>c['start'] and s['start']<c['end']):
+                    original=Path(local_source).expanduser().resolve()
+                    delta=perf.audio_alignment(audio,original,c['start'],b-a,media_start=a)
+                    subs=perf.aligned_segments(seg,c['start'],c['end'],delta,b-a)
                     if subs:
-                        perf.count('candidate_asr_avoided');print('Selected footage waveform matched; reusing verified word timestamps.',flush=True)
-                if not subs: subs=transcribe(media,local_work,args.whisper,args.language or None)
+                        from gaming import verify_visual_range
+                        if verify_visual_range(audio,original,c['start'],b-a,media_start=a):
+                            media=original;source_clock=a;perf.count('local_direct_renders');perf.count('candidate_asr_avoided')
+                        else:subs=[]
+                if not subs:
+                    media=fetch(args,job,root/f'clip{j}',a,b,False)
+                    if media is None: stopped=True; break
+                    local_work=root/f'caption{j}';local_work.mkdir()
+                    stage('transcribe','Checking dialogue in selected video',progress=None)
+                    if rolling and args.processing_mode in ('fast','smart') and any(s.get('words') for s in seg if s['end']>c['start'] and s['start']<c['end']):
+                        actual_length=duration(media)
+                        delta=perf.audio_alignment(audio,media,c['start'],min(b-a,actual_length))
+                        subs=perf.aligned_segments(seg,c['start'],c['end'],delta,actual_length)
+                        if subs:
+                            perf.count('candidate_asr_avoided');print('Selected footage waveform matched; reusing verified word timestamps.',flush=True)
+                    if not subs: subs=transcribe(media,local_work,args.whisper,args.language or None)
                 # Reject obvious audio-seek drift using token overlap; otherwise review manually.
                 import re
                 def words(s): return set(re.findall(r'\w+',s.casefold()))
@@ -247,19 +280,20 @@ def _run_replay(args,job,out,update,stage,atomic,candidates,info,rolling):
                     from gaming import verify_visual_range
                     if not verify_visual_range(audio,media,c['start'],b-a):
                         print('Skipping candidate: visual timing could not be verified.',flush=True); continue
-                local={**c,'start':0.,'end':min(b-a,duration(media))}
+                local={**c,'start':source_clock,'end':source_clock+min(b-a,duration(media)-source_clock)}
+                if source_clock:subs=shift_segments(subs,source_clock)
                 stage('export',f'Editing highlight {len(clips)+1}',progress=None)
                 name=f'short_{len(clips)+1:02}.mp4'; pending=out/('pending_'+name); dest=out/name
                 meta={}
                 if viral:
                     from viral import render as viral_render
-                    local['impact']=c.get('impact',-1)-c['start'] if c.get('impact',-1)>=0 else -1
+                    local['impact']=source_clock+c.get('impact',-1)-c['start'] if c.get('impact',-1)>=0 else -1
                     try: meta=viral_render(args,media,pending,subs,local)
                     except ValueError as exc:
                         perf.reject(str(exc)); pending.unlink(missing_ok=True); print('Skipping viral candidate: '+str(exc),flush=True); continue
                 elif gaming:
                     from gaming import render as gaming_render, SplitLayoutUnavailable
-                    local['impact']=c.get('impact',-1)-c['start'] if c.get('impact',-1)>=0 else -1
+                    local['impact']=source_clock+c.get('impact',-1)-c['start'] if c.get('impact',-1)>=0 else -1
                     try:
                         meta=gaming_render(media,pending,subs,local,args.software,getattr(args,'face_region',None))
                     except SplitLayoutUnavailable as exc:
@@ -271,15 +305,18 @@ def _run_replay(args,job,out,update,stage,atomic,candidates,info,rolling):
                     from creator_edit import render_dynamic
                     meta=render_dynamic(media,pending,subs,local,args.layout,args.software,captions=args.captions)
                 else: render(media,pending,subs,local,args.layout,args.software,captions=args.captions)
+                if viral:
+                    from viral import reject_duplicate_export
+                    if reject_duplicate_export(pending,meta,clips):continue
                 os.replace(pending,dest)
                 if pending.with_suffix('.srt').exists(): os.replace(pending.with_suffix('.srt'),dest.with_suffix('.srt'))
-                clips.append({**c,'start':a,'end':b,'file':name,**meta,'source_url':args.url,'source_strategy':'visual_preview' if gaming else 'audio_first','source_identity':getattr(args,'source_identity','')})
+                clips.append({**c,'start':a,'end':b,'file':name,**meta,'source_url':getattr(args,'url',None),'source_strategy':'visual_preview' if gaming else 'audio_first','source_identity':getattr(args,'source_identity','')})
                 perf.count('accepted_candidates'); atomic(out/'clips.json',clips)
                 if publishing_enabled(args) and not getattr(args,'defer_publish',False):
                     from live import publish_ready
                     stage('publish',f'Publishing highlight {len(clips)}',progress=None)
                     publish_ready(args,dest,clips[-1]); atomic(out/'clips.json',clips)
-                if args.keep_source:
+                if args.keep_source and not (local_source and media==Path(local_source).expanduser().resolve()):
                     kept=job/'smart_sources'; kept.mkdir(exist_ok=True); shutil.copy2(media,kept/(f'{len(clips):03}'+media.suffix))
                 if args.count and len(clips)>=args.count: break
             if stopped: break

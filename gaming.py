@@ -137,7 +137,7 @@ def render(source,dest,segments,clip,software=False,region=None):
             # Preserve the entire gameplay frame incl. HUD using a blurred fill behind it.
             grade='eq=contrast=1.035:saturation=1.06,unsharp=5:5:0.25:5:5:0'
             gh=1344; fh=576
-            shake="+2*sin(2*PI*t*7)" if hot else ''
+            shake=""  # Stable HUD and gameplay; reaction emphasis belongs to the facecam.
             # Hide only the detected webcam area on the gameplay panel. The original
             # game underneath an embedded camera cannot be recovered.
             mx,my=max(0,int(rx*w)//2*2),max(0,int(ry*h)//2*2)
@@ -176,13 +176,13 @@ def render(source,dest,segments,clip,software=False,region=None):
     return {'edit_style':'gaming','facecam':True,'layout':'gameplay_top_streamer_bottom','layout_version':3,'gameplay_height':1344,'facecam_height':576,'jump_cuts':len(holes),'shot_count':len(pieces),'removed_seconds':round(sum(y-x for x,y in holes),2),'output_duration':round(duration(dest),2),'edit_pieces':pieces}
 
 
-def verify_visual_range(preview,media,start,length):
+def verify_visual_range(preview,media,start,length,media_start=0.):
     """Conservative visual sanity check when no dialogue anchors are available."""
     import cv2,numpy as np
     a=cv2.VideoCapture(str(preview)); b=cv2.VideoCapture(str(media)); diffs=[]
     try:
         for fraction in (.2,.45,.7,.9):
-            t=length*fraction; a.set(cv2.CAP_PROP_POS_MSEC,(start+t)*1000); b.set(cv2.CAP_PROP_POS_MSEC,t*1000)
+            t=length*fraction; a.set(cv2.CAP_PROP_POS_MSEC,(start+t)*1000); b.set(cv2.CAP_PROP_POS_MSEC,(media_start+t)*1000)
             ok,x=a.read(); yes,y=b.read()
             if ok and yes:
                 x=cv2.resize(x,(96,54));y=cv2.resize(y,(96,54));diffs.append(float(np.mean(cv2.absdiff(x,y)))/255)

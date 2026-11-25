@@ -60,7 +60,7 @@ class ViralTests(unittest.TestCase):
             with patch.dict(os.environ,{'SHORTS_AUTHORIZED_MUSIC':'','SHORTS_AUTHORIZED_SFX':''}):viral.decorate(master,dest,words,{**clip,**meta},'karaoke',True,True)
             q=viral.validate_export(dest,words,'karaoke');self.assertGreaterEqual(q['duration'],15);self.assertGreater(q['asr_mean_word_confidence'],.9)
     @unittest.skipUnless(shutil.which('ffmpeg'),'ffmpeg required')
-    def test_complete_viral_render_and_variant_with_local_audio(self):
+    def test_complete_viral_render_ignores_external_audio(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td); source=root/'source.mp4'; dest=root/'pending_short_01.mp4'; tone=root/'authorized-test-tone.wav'
             subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=s=320x180:r=15','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','17','-c:v','libx264','-threads','2','-c:a','aac',str(source)],check=True)
@@ -70,5 +70,5 @@ class ViralTests(unittest.TestCase):
             words=[{'word':'Test','start':1,'end':1.5,'probability':.99},{'word':'caption','start':1.5,'end':2,'probability':.96}]
             with patch.object(viral,'words_for',return_value=words),patch.dict(os.environ,{'SHORTS_AUTHORIZED_MUSIC':str(tone),'SHORTS_AUTHORIZED_SFX':str(tone)}):
                 result=viral.render(args,source,dest,[],clip)
-            self.assertTrue(result['viral']);self.assertTrue(dest.exists());self.assertTrue((root/'short_01_words.json').exists());self.assertTrue((root/'short_01_thumb.jpg').exists());self.assertEqual(len(result['variations']),1);self.assertTrue((root/'short_01_alt.mp4').exists())
+            self.assertTrue(result['viral']);self.assertEqual(result['audio_policy'],'original_only');self.assertTrue(dest.exists());self.assertTrue((root/'short_01_words.json').exists());self.assertTrue((root/'short_01_thumb.jpg').exists());self.assertEqual(len(result['variations']),1);self.assertTrue((root/'short_01_alt.mp4').exists())
 if __name__=='__main__':unittest.main()

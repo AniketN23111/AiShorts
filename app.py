@@ -76,10 +76,7 @@ def start(data):
             if data.get('viral_variants') is True: cmd+=['--viral-variants']
             if data.get('viral_full_scan') is True: cmd+=['--viral-full-scan']
             if data.get('viral_review') is True: cmd+=['--viral-review']
-            if data.get('auto_music') is True:
-                cmd+=['--auto-music']
-                if data.get('audio_youtube_only') is True: cmd+=['--audio-youtube-only']
-                if data.get('reference_style'): cmd+=['--reference-style',data['reference_style']]
+            if data.get('reference_style'): cmd+=['--reference-style',data['reference_style']]
             if data.get('chat_file'):
                 from editorial_review import chat_path
                 cmd+=['--chat-file',str(chat_path(data['chat_file']))]
@@ -200,9 +197,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed(): return self.reply({'error':'Invalid host'},403)
         path=unquote(urlsplit(self.path).path)
         if path == '/api/status': return self.reply(current())
-        if path == '/api/sound/library':
-            from sound_studio import library, references, public_asset
-            return self.reply({'assets':[public_asset(r) for r in library()],'references':references()})
+        if path in ('/api/reference/profiles','/api/sound/library'):
+            from visual_reference import profiles
+            return self.reply({'assets':[],'references':profiles()})
         if path == '/api/library': return self.reply({'sessions':library()})
         saved=re.fullmatch(r'/api/library/([0-9a-f]{32})',path)
         if saved:
@@ -234,37 +231,16 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed() or self.headers.get('Origin') != 'http://'+HOST or self.headers.get('X-Local-UI') != '1':
             return self.reply({'error':'Invalid local request'},403)
         try:
-            if self.path in ('/api/sound/import','/api/sound/reference','/api/sound/remix'):
+            if self.path in ('/api/sound/import','/api/sound/remix'):
+                return self.reply({'error':'External audio disabled in V16. Only original stream audio is used.'},400)
+            if self.path in ('/api/reference/analyze','/api/sound/reference'):
                 n=int(self.headers.get('Content-Length','0'))
-                if not 0<n<=16384: raise ValueError('Invalid sound request size')
+                if not 0<n<=16384: raise ValueError('Invalid reference request size')
                 data=json.loads(self.rfile.read(n))
-                from sound_studio import import_folder,reference,plan,attributions,library
+                from visual_reference import analyze
                 with LOCK:
-                    if ACTIVE and ACTIVE['proc'].poll() is None: raise ValueError('Wait for active clipping to finish before importing or remixing.')
-                    if self.path=='/api/sound/import': return self.reply(import_folder(str(data.get('folder',''))))
-                    if self.path=='/api/sound/reference': return self.reply(reference(str(data.get('path','')),data.get('authorized') is True,data.get('deep') is True))
-                    m=re.fullmatch(r'/media/([0-9a-f]{32})/(\d{8}_\d{6}_\d{6})/(short_\d+\.mp4)',str(data.get('video','')))
-                    if not m:raise ValueError('Invalid clip path')
-                    path=OUTPUT.joinpath(*m.groups()); master=path.with_name(path.stem+'_master.mp4'); manifest=path.parent/'clips.json'
-                    if not path.is_file() or not master.is_file() or not manifest.is_file():raise ValueError('No retained clean master; enable automatic audio for new clips')
-                    clip=next((c for c in json.loads(manifest.read_text()) if c.get('file')==path.name),None)
-                    if not clip or not clip.get('audio_timeline'):raise ValueError('No editable audio timeline')
-                    from shorts import duration
-                    from viral import decorate,validate_export
-                    mg=float(data.get('music_gain',.1)); sg=float(data.get('sfx_gain',.13))
-                    if not (0<=mg<=.25 and 0<=sg<=.25):raise ValueError('Gain must be between 0 and 0.25')
-                    platforms=set(clip['audio_timeline']['platforms']); choice=data.get('music_id','auto'); rows=library()
-                    if choice=='none':rows=[r for r in rows if r['kind']!='music']
-                    if data.get('effects') is False:rows=[r for r in rows if r['kind']!='sfx']
-                    timeline=plan(clip,duration(master),platforms,rows=rows,music_id=None if choice in ('auto','none') else choice,music_gain=mg,sfx_gain=sg)
-                    dest=path.with_name(path.stem+'_mix.mp4'); pending=dest.with_name('pending_'+dest.name)
-                    try:
-                        decorate(master,pending,[],{**clip,'audio_timeline':timeline},'off',False,False,video_base=path)
-                        validation=validate_export(pending,[],'off')
-                        from sound_studio import measure_mix
-                        validation['audio_mix']=measure_mix(pending,timeline); os.replace(pending,dest)
-                    finally:pending.unlink(missing_ok=True)
-                    return self.reply({'video':data['video'].rsplit('/',1)[0]+'/'+dest.name,'timeline':timeline,'attribution':attributions(timeline),'quality':validation})
+                    if ACTIVE and ACTIVE['proc'].poll() is None: raise ValueError('Wait for active clipping to finish before analyzing a reference.')
+                    return self.reply(analyze(str(data.get('path','')),data.get('authorized') is True,data.get('deep') is True))
             if self.path == '/api/analytics/import':
                 n=int(self.headers.get('Content-Length','0'))
                 if not 0<n<=500000: raise ValueError('Invalid CSV request size.')

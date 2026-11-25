@@ -1,3 +1,7 @@
+# V16 — Original Audio & Quick Professional Shorts
+
+Start with [V16_SETUP.md](V16_SETUP.md). The generation pipeline uses only original source audio. Older guides describe superseded features; V15 music imports/remixing and automatic sound design are disabled.
+
 # V13 — Performance & Story Studio
 
 See [V13_SETUP.md](V13_SETUP.md) for the optimized modes, measured component benchmarks, installation, and known limitations. V12 publishing, clip library, captions and 70/30 Gaming Pro remain available.
@@ -93,5 +97,5 @@ No full-video transcription is required in this mode. Live YouTube acquisition h
 ## V6 Creator Edition
 See [CREATOR_SETUP.md](CREATOR_SETUP.md) for creator editing and optional private YouTube upload setup.
 
-## V15 optional Sound Studio
+## Historical V15 Sound Studio (disabled in V16)
 See [V15_SETUP.md](V15_SETUP.md) for the local licensed music library, reference analysis, editable audio mixes and platform-specific publishing checks.

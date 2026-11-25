@@ -5,7 +5,7 @@ import contextlib, functools, hashlib, json, math, os, re, resource, subprocess,
 from pathlib import Path
 
 MODES=('fast','smart','professional')
-WEIGHTS={'hook':25,'story':20,'retention':20,'entertainment':15,'emotion':10,'context':5,'rewatch':5}
+WEIGHTS={'hook':25,'retention':25,'entertainment':20,'story':15,'emotion':10,'rewatch':5}
 PATTERNS=('setup_outcome','question_answer','challenge_victory','argument_resolution','conversation_comedy','suspense_reveal','mistake_consequence','fact_explanation','prediction_result','emotional_payoff','other')
 PENALTIES=('missing_context','boring_sections','weak_ending','unclear_speech','poor_visual_quality','repetitive_content','misleading_editing','duplicate_moment')
 _STATS={}; _COUNTS={}; _REJECTIONS={}; _START=time.monotonic(); _LOCK=threading.RLock()
@@ -186,7 +186,7 @@ def encoder_args(software):
     return ['-c:v',available[0],'-b:v','8M'] if available else None
 
 @timed('audio_alignment')
-def audio_alignment(preview,media,start,length):
+def audio_alignment(preview,media,start,length,media_start=0.):
     """Verify preview-to-HD alignment on multiple waveform anchors.
     Returns offset on preview clock relative to requested start, or None.
     Fail closed for silence, ambiguous repeated patterns, drift, or decode errors.
@@ -196,7 +196,7 @@ def audio_alignment(preview,media,start,length):
     def decode(path,a,b):
         cmd=['ffmpeg','-v','error','-ss',str(a),'-i',str(path),'-t',str(b-a),'-vn','-ac','1','-ar',str(rate),'-f','f32le','-']
         return np.frombuffer(subprocess.check_output(cmd,timeout=60),dtype='<f4').astype(np.float64)
-    try: x=decode(preview,left,right); y=decode(media,0,length)
+    try: x=decode(preview,left,right); y=decode(media,media_start,media_start+length)
     except (OSError,subprocess.SubprocessError): return None
     if len(y)<rate*5:return None
     offsets=[]; radius=int(rate*.23); n=rate*2

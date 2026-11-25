@@ -216,7 +216,14 @@ def reference(path,authorized=False,deep=False):
 def references():return [d for p in root().glob('reference-*.json') if isinstance(d:=read_json(p),dict)]
 
 def main():
+    # Kept for historical receipts and compatibility; V16 does not import or select audio.
     import argparse
-    p=argparse.ArgumentParser(); sub=p.add_subparsers(dest='cmd',required=True); a=sub.add_parser('import');a.add_argument('folder');sub.add_parser('list');a=sub.add_parser('reference');a.add_argument('path');a.add_argument('--authorized',action='store_true');a.add_argument('--deep',action='store_true');args=p.parse_args()
-    result=import_folder(args.folder) if args.cmd=='import' else reference(args.path,args.authorized,args.deep) if args.cmd=='reference' else library();print(json.dumps(result,ensure_ascii=False,indent=2))
+    p=argparse.ArgumentParser(description='V16 original audio only. Legacy audio imports are disabled.')
+    sub=p.add_subparsers(dest='cmd',required=True); a=sub.add_parser('import');a.add_argument('folder');sub.add_parser('list');a=sub.add_parser('reference');a.add_argument('path');a.add_argument('--authorized',action='store_true');a.add_argument('--deep',action='store_true');args=p.parse_args()
+    if args.cmd=='import':p.error('External audio imports disabled in V16.')
+    if args.cmd=='reference':
+        from visual_reference import analyze
+        result=analyze(args.path,args.authorized,args.deep)
+    else:result=library()  # Read-only inspection of previously imported assets.
+    print(json.dumps(result,ensure_ascii=False,indent=2))
 if __name__=='__main__':main()
