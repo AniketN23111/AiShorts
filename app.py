@@ -26,15 +26,16 @@ def validate(data):
     else: raise ValueError('Invalid source type.')
     if data.get('source_auth','public') not in ('public','chrome'): raise ValueError('Invalid viewing session.')
     if data.get('edit_style','clean') not in ('clean','dynamic','gaming'): raise ValueError('Invalid editing style.')
-    count,minutes,segment,score=(int(data.get(k,v)) for k,v in [('count',6),('minutes',0),('segment',120),('score',75)])
+    count,minutes,segment,score=(int(data.get(k,v)) for k,v in [('count',6),('minutes',0),('segment',60),('score',75)])
     layout,language=data.get('layout','original'),data.get('language','')
     mode=data.get('mode','auto')
-    if not (0<=count<=100 and 0<=minutes<=720 and segment in (60,120,180) and 0<=score<=100 and layout in ('original','fit','crop') and language in ('','en','hi','mr','ta','te','bn','gu','kn','ml','pa','ur','es','fr','de','ja','ko','zh','pt','ar') and mode in ('auto','live','replay')):
+    if not (0<=count<=100 and 0<=minutes<=720 and segment in (30,45,60,120,180) and 0<=score<=100 and layout in ('original','fit','crop') and language in ('','en','hi','mr','ta','te','bn','gu','kn','ml','pa','ur','es','fr','de','ja','ko','zh','pt','ar') and mode in ('auto','live','replay')):
         raise ValueError('Invalid clip settings.')
     from performance import MODES
     if data.get('processing_mode','smart') not in MODES: raise ValueError('Invalid processing mode.')
     from viral import PRESETS, CAPTIONS
     if data.get('viral_preset','') not in ('',*PRESETS) or data.get('viral_captions','off') not in CAPTIONS: raise ValueError('Invalid viral preset or caption style.')
+    if data.get('reference_style') and not re.fullmatch('[0-9a-f]{64}',str(data['reference_style'])): raise ValueError('Invalid reference style')
     if data.get('chat_file'):
         from editorial_review import chat_path
         chat_path(data['chat_file'])
@@ -75,6 +76,10 @@ def start(data):
             if data.get('viral_variants') is True: cmd+=['--viral-variants']
             if data.get('viral_full_scan') is True: cmd+=['--viral-full-scan']
             if data.get('viral_review') is True: cmd+=['--viral-review']
+            if data.get('auto_music') is True:
+                cmd+=['--auto-music']
+                if data.get('audio_youtube_only') is True: cmd+=['--audio-youtube-only']
+                if data.get('reference_style'): cmd+=['--reference-style',data['reference_style']]
             if data.get('chat_file'):
                 from editorial_review import chat_path
                 cmd+=['--chat-file',str(chat_path(data['chat_file']))]
@@ -165,7 +170,7 @@ def read_clips(job_id):
             clip['variations']=[{**v,'video':base+v['file']} for v in clip.get('variations',[]) if re.fullmatch(r'short_\d+_alt\.mp4',v.get('file',''))]
             if re.fullmatch(r'short_\d+_thumb\.jpg',str(clip.get('thumbnail_file',''))): clip['thumbnail']=base+clip['thumbnail_file']
             words=OUTPUT/job_id/clip['video'].split('/')[-2]/(Path(clip['file']).stem+'_words.json')
-            if words.is_file(): clip['words_url']=base+words.name
+            if words.is_file() and clip.get('caption_style')!='off': clip['words_url']=base+words.name
     return clips
 
 def library():
@@ -195,6 +200,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed(): return self.reply({'error':'Invalid host'},403)
         path=unquote(urlsplit(self.path).path)
         if path == '/api/status': return self.reply(current())
+        if path == '/api/sound/library':
+            from sound_studio import library, references, public_asset
+            return self.reply({'assets':[public_asset(r) for r in library()],'references':references()})
         if path == '/api/library': return self.reply({'sessions':library()})
         saved=re.fullmatch(r'/api/library/([0-9a-f]{32})',path)
         if saved:
@@ -217,7 +225,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(publisher.channel(publisher.service()))
             except Exception: return self.reply({'error':'Channel not connected or unavailable. Run python publisher.py connect in Terminal.'},400)
         if path == '/': return self.file(ROOT/'index.html','text/html; charset=utf-8')
-        m=re.fullmatch(r'/media/([0-9a-f]{32})/(\d{8}_\d{6}_\d{6})/(short_\d+(?:\.(?:mp4|srt)|_alt\.mp4|_review\.mp4|_words\.json|_thumb\.jpg))',path)
+        m=re.fullmatch(r'/media/([0-9a-f]{32})/(\d{8}_\d{6}_\d{6})/(short_\d+(?:\.(?:mp4|srt)|_alt\.mp4|_review\.mp4|_mix\.mp4|_words\.json|_thumb\.jpg))',path)
         if m:
             p=OUTPUT.joinpath(*m.groups())
             return self.file(p,'video/mp4' if p.suffix=='.mp4' else 'application/json' if p.suffix=='.json' else 'image/jpeg' if p.suffix=='.jpg' else 'application/octet-stream')
@@ -226,6 +234,37 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed() or self.headers.get('Origin') != 'http://'+HOST or self.headers.get('X-Local-UI') != '1':
             return self.reply({'error':'Invalid local request'},403)
         try:
+            if self.path in ('/api/sound/import','/api/sound/reference','/api/sound/remix'):
+                n=int(self.headers.get('Content-Length','0'))
+                if not 0<n<=16384: raise ValueError('Invalid sound request size')
+                data=json.loads(self.rfile.read(n))
+                from sound_studio import import_folder,reference,plan,attributions,library
+                with LOCK:
+                    if ACTIVE and ACTIVE['proc'].poll() is None: raise ValueError('Wait for active clipping to finish before importing or remixing.')
+                    if self.path=='/api/sound/import': return self.reply(import_folder(str(data.get('folder',''))))
+                    if self.path=='/api/sound/reference': return self.reply(reference(str(data.get('path','')),data.get('authorized') is True,data.get('deep') is True))
+                    m=re.fullmatch(r'/media/([0-9a-f]{32})/(\d{8}_\d{6}_\d{6})/(short_\d+\.mp4)',str(data.get('video','')))
+                    if not m:raise ValueError('Invalid clip path')
+                    path=OUTPUT.joinpath(*m.groups()); master=path.with_name(path.stem+'_master.mp4'); manifest=path.parent/'clips.json'
+                    if not path.is_file() or not master.is_file() or not manifest.is_file():raise ValueError('No retained clean master; enable automatic audio for new clips')
+                    clip=next((c for c in json.loads(manifest.read_text()) if c.get('file')==path.name),None)
+                    if not clip or not clip.get('audio_timeline'):raise ValueError('No editable audio timeline')
+                    from shorts import duration
+                    from viral import decorate,validate_export
+                    mg=float(data.get('music_gain',.1)); sg=float(data.get('sfx_gain',.13))
+                    if not (0<=mg<=.25 and 0<=sg<=.25):raise ValueError('Gain must be between 0 and 0.25')
+                    platforms=set(clip['audio_timeline']['platforms']); choice=data.get('music_id','auto'); rows=library()
+                    if choice=='none':rows=[r for r in rows if r['kind']!='music']
+                    if data.get('effects') is False:rows=[r for r in rows if r['kind']!='sfx']
+                    timeline=plan(clip,duration(master),platforms,rows=rows,music_id=None if choice in ('auto','none') else choice,music_gain=mg,sfx_gain=sg)
+                    dest=path.with_name(path.stem+'_mix.mp4'); pending=dest.with_name('pending_'+dest.name)
+                    try:
+                        decorate(master,pending,[],{**clip,'audio_timeline':timeline},'off',False,False,video_base=path)
+                        validation=validate_export(pending,[],'off')
+                        from sound_studio import measure_mix
+                        validation['audio_mix']=measure_mix(pending,timeline); os.replace(pending,dest)
+                    finally:pending.unlink(missing_ok=True)
+                    return self.reply({'video':data['video'].rsplit('/',1)[0]+'/'+dest.name,'timeline':timeline,'attribution':attributions(timeline),'quality':validation})
             if self.path == '/api/analytics/import':
                 n=int(self.headers.get('Content-Length','0'))
                 if not 0<n<=500000: raise ValueError('Invalid CSV request size.')

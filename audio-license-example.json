@@ -1,0 +1,16 @@
+{
+  "name": "REPLACE with actual track name",
+  "artist": "REPLACE with actual rights holder",
+  "kind": "music",
+  "license": "original",
+  "source_url": "local:original",
+  "evidence": "REPLACE with actual license evidence or original creation record",
+  "rights_confirmed": false,
+  "platforms": ["youtube", "instagram"],
+  "attribution_required": false,
+  "attribution": "",
+  "moods": ["gaming", "exciting", "epic"],
+  "vocals": "instrumental",
+  "genre": "REPLACE with actual genre",
+  "instruments": "REPLACE with actual instruments"
+}

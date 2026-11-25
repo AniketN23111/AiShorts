@@ -92,3 +92,6 @@ No full-video transcription is required in this mode. Live YouTube acquisition h
 
 ## V6 Creator Edition
 See [CREATOR_SETUP.md](CREATOR_SETUP.md) for creator editing and optional private YouTube upload setup.
+
+## V15 optional Sound Studio
+See [V15_SETUP.md](V15_SETUP.md) for the local licensed music library, reference analysis, editable audio mixes and platform-specific publishing checks.

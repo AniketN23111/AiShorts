@@ -1,12 +1,13 @@
 """Audio-first, bounded replay acquisition. Never fall back to a full video automatically."""
-import math, os, shutil, signal, subprocess, sys, tempfile, time
+import math, os, shutil, signal, subprocess, sys, tempfile, time, copy, threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from shorts import duration, transcribe, render
 import performance as perf
 from youtube_source import validate_url, eta
 
 
-def probe(url, browser=None):
+def probe(url, browser=None, session=None):
     from yt_dlp import YoutubeDL
     options={'quiet':True,'noplaylist':True,'skip_download':True,'socket_timeout':30,'retries':2,'format':'best/bestvideo+bestaudio'}
     if browser: options['cookiesfrombrowser']=(browser,)
@@ -21,12 +22,15 @@ def probe(url, browser=None):
     if info.get('is_live') or status=='is_live': return None
     seconds=info.get('duration')
     if not isinstance(seconds,(int,float)) or not math.isfinite(seconds) or seconds<=0: raise ValueError('Smart replay requires a known duration.')
+    if session is not None and not browser and getattr(session,'processing_mode',None) in ('fast','smart') and getattr(session,'viral_preset',''):
+        from quick_range import preview_format
+        session._preview_plan=preview_format(info)
     return info.get('title','YouTube replay'),float(seconds)
 
 
 def section_command(url, folder, start, end, audio, browser=None):
     if not 0<=start<end or end-start>250: raise ValueError('Invalid section length')
-    cmd=[sys.executable,'-m','yt_dlp','--ignore-config','--no-playlist','--no-simulate','--no-live-from-start','--match-filters','!is_live & !is_upcoming','--socket-timeout','45','--retries','2','--fragment-retries','2','--abort-on-unavailable-fragments','--download-sections',f'*{start:.3f}-{end:.3f}','-f', 'bv*[height<=360]+ba/b[height<=360]' if audio=='preview' else 'ba' if audio else 'bv*[height<=1080]+ba/b[height<=1080]/b','--newline','-o',str(folder/'section.%(ext)s')]
+    cmd=[sys.executable,'-m','yt_dlp','--ignore-config','--no-playlist','--no-simulate','--no-live-from-start','--match-filters','!is_live & !is_upcoming','--socket-timeout','45','--retries','2','--fragment-retries','2','--abort-on-unavailable-fragments','--download-sections',f'*{start:.3f}-{end:.3f}','-f', 'b[height<=360][protocol=https]/b[height<=360]/bv*[height<=360]+ba' if audio=='preview' else 'ba' if audio else 'bv*[height<=1080]+ba/b[height<=1080]/b','--newline','-o',str(folder/'section.%(ext)s')]
     if not audio or audio=='preview': cmd+=['--merge-output-format','mkv','--force-keyframes-at-cuts']
     if browser: cmd+=['--cookies-from-browser',browser]
     return cmd+[validate_url(url)]
@@ -46,16 +50,37 @@ def terminate(proc):
 @perf.timed("source_acquisition")
 def fetch(args, job, folder, start, end, audio):
     folder.mkdir(parents=True,exist_ok=True)
-    if (job/'stop').exists(): return None
+    def cancelled():
+        event=getattr(args,'_prefetch_cancel',None)
+        return (job/'stop').exists() or (event is not None and event.is_set())
+    if cancelled(): return None
+    if audio=='preview' and getattr(args,'_preview_plan',None):
+        from quick_range import supports_range, acquire
+        if shutil.disk_usage(folder).free<2*1024**3: raise RuntimeError('Low free disk space.')
+        plan=args._preview_plan; dest=folder/'section.mkv'
+        try:
+            if plan.get('range_verified') or supports_range(plan):
+                plan['range_verified']=True
+                if acquire(plan,start,end,dest,cancelled,terminate):
+                    length=duration(dest)
+                    if abs(length-(end-start))<=max(.35,(end-start)*.01):
+                        perf.count('direct_preview_hits'); return dest
+        except (OSError,ValueError,subprocess.SubprocessError): pass
+        dest.unlink(missing_ok=True)
+        # Disable this signed URL for subsequent requests after a failure.
+        plan.clear()
+        if cancelled(): return None
+        print('Direct preview unavailable; using native bounded section request.',flush=True)
     with (job/'download.log').open('a') as log:
         log.write(f'\nRequested {"audio" if audio else "video"} section {start:.3f}-{end:.3f}\n'); log.flush()
         proc=subprocess.Popen(section_command(args.url,folder,start,end,audio,getattr(args,'browser',None)),stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
         began=time.monotonic()
         try:
             while proc.poll() is None:
-                if (job/'stop').exists(): return None
+                if cancelled(): return None
                 if shutil.disk_usage(folder).free<2*1024**3: raise RuntimeError('Low free disk space.')
-                if time.monotonic()-began>600: raise RuntimeError('Section acquisition exceeded ten minutes; source may not support efficient seeking. No full-video fallback was started.')
+                limit=180 if audio=='preview' and getattr(args,'processing_mode',None) in ('fast','smart') else 600
+                if time.monotonic()-began>limit: raise RuntimeError(f'Section acquisition exceeded {limit} seconds; source may not support efficient seeking. No full-video fallback was started. Try Professional mode for a longer deadline or an authorized local recording.')
                 time.sleep(.4)
             if proc.returncode: raise RuntimeError('Requested section could not be acquired. Check download.log. No full-video fallback was started.')
         finally: terminate(proc)
@@ -90,11 +115,27 @@ class RollingPreview:
     Guard the stream-copy join against format changes and timing drift; the
     caller falls back to a conventional overlapped request if either occurs.
     """
-    def __init__(self, root): self.root=root; self.previous=None
+    def __init__(self, root, *, prefetch=False, total=0, step=0):
+        self.root=root; self.previous=None; self.total=total; self.step=step
+        self.executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix='preview') if prefetch else None
+        self.pending=None; self.cancel=threading.Event()
+
+    def close(self):
+        self.cancel.set()
+        if self.executor: self.executor.shutdown(wait=True,cancel_futures=True)
+
+    def schedule(self,args,job,index,end):
+        # Start after any overlap fallback, then overlap AI and rendering.
+        if self.executor and self.pending is None and end<self.total and not (job/'stop').exists() and not (job/'pause').exists():
+            pref=copy.copy(args); pref._prefetch_cancel=self.cancel
+            self.pending=self.executor.submit(fetch,pref,job,self.root/str(index+1),end,min(self.total,end+self.step),'preview')
 
     def load(self,args,job,work,index,boundary,end,stage):
         folder=self.root/str(index)
-        media=fetch(args,job,folder,boundary,end,'preview')
+        if self.pending is not None:
+            media=self.pending.result(); self.pending=None
+            if media is not None: perf.count('prefetched_previews')
+        else: media=fetch(args,job,folder,boundary,end,'preview')
         if media is None: return None
         asr=work/'fresh_asr';asr.mkdir()
         stage('transcribe',f'Transcribing new footage {index}',progress=None)
@@ -125,7 +166,10 @@ def run_replay(args,job,out,update,stage,atomic,candidates,info):
     # Only the optimized viral route uses rolling previews; legacy paths remain unchanged.
     optimized=bool(getattr(args,'viral_preset','')) and getattr(args,'processing_mode',None) in perf.MODES
     with tempfile.TemporaryDirectory(prefix='rolling-preview-',dir=job) as tmp:
-        return _run_replay(args,job,out,update,stage,atomic,candidates,info,RollingPreview(Path(tmp)) if optimized else None)
+        rolling=RollingPreview(Path(tmp),prefetch=optimized and args.processing_mode in ('fast','smart'),total=min(info[1],args.minutes*60) if args.minutes else info[1],step=args.segment) if optimized else None
+        try: return _run_replay(args,job,out,update,stage,atomic,candidates,info,rolling)
+        finally:
+            if rolling: rolling.close()
 
 
 def wait_if_paused(job,update):
@@ -163,6 +207,7 @@ def _run_replay(args,job,out,update,stage,atomic,candidates,info,rolling):
                 work=root/'asr'; work.mkdir()
                 stage('transcribe',f'Transcribing audio section {index}',progress=None)
                 seg=transcribe(audio,work,args.whisper,args.language or None)
+            if rolling: rolling.schedule(args,job,index,end)
             stage('analyze',f'Finding highlights in audio section {index}',progress=None)
             if viral:
                 from viral import select as viral_select

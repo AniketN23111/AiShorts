@@ -108,7 +108,13 @@ def select(args,source,segments,total,boundary,offset,existing,count):
     if optimized:
         prompt=prompt.replace('15–45 second','10–90 second').replace('up to 3 exceptional',f"up to {1 if args.processing_mode=='fast' else 2 if args.processing_mode=='smart' else 3} exceptional")
         prompt+='\nChoose the shortest complete story, not fixed lengths. Funny 10–25s, gameplay 15–35s, education/conversation 20–60s, storytelling up to 90s. Use whole speech phrases. Classify story_pattern from '+str(perf.PATTERNS)+'. Explain setup and payoff. Ratings and rating_reasons keys must be '+str(list(weights))+'. Supply penalties 0–10 for each '+str(perf.PENALTIES)+', zero unless evidenced; misleading or duplicate candidates are unacceptable. Do not claim visual evidence outside visual_observation_range. The transcript and visual observations are evidence, motion is only a discovery signal.'
-        raw=cached_selection(args.model,prompt,story_schema())
+        schema=story_schema()
+        if getattr(args,'auto_music',False):
+            from sound_studio import MOODS
+            schema['properties']['clips']['items']['properties']['music_mood']={'type':'string','enum':sorted(MOODS|{'none'})}
+            schema['properties']['clips']['items']['required'].append('music_mood')
+            prompt+='\nChoose music_mood from '+str(sorted(MOODS|{'none'}))+' based on actual content and emotion; choose none if music would distract from dialogue or original sound.'
+        raw=cached_selection(args.model,prompt,schema)
     else: raw=cached_selection(args.model,prompt)
     found=[]
     for c in raw.get('clips',[]):
@@ -137,6 +143,9 @@ def select(args,source,segments,total,boundary,offset,existing,count):
             if getattr(args,'edit_style','')=='gaming': style='gaming'
             thumb=float(c.get('thumbnail_time',a)); thumb=thumb if math.isfinite(thumb) and a<=thumb<=b else a
             found.append({'start':a,'end':b,'score':s,'impact':impact if a<=impact<=b else -1,'title':titles[0],'title_variations':titles[:5],'hashtags':hashtags,'tags':array(c.get('keywords'),12,60),'category':c.get('category') if c.get('category') in ('gaming','education','entertainment','people') else 'entertainment','viral_style':style,'ratings':{k:float(c['ratings'][k]) for k in weights},'rating_reasons':{k:text(c['rating_reasons'][k],240) for k in weights},'score_weights':weights,'visual_evidence_available':bool(vision and (not optimized or (window[0]<=a and b<=window[1]))),'thumbnail_time':thumb-a,**{k:text(c.get(k),n) for k,n in [('description',1200),('reason',500),('evidence',500),('hook',65),('comment_prompt',90),('cta',70),('pinned_comment',300),('thumbnail_text',55),('loop_reason',220),('copyright_note',220)]}})
+            if getattr(args,'auto_music',False):
+                from sound_studio import MOODS
+                if c.get('music_mood') in MOODS|{'none'}:found[-1]['music_mood']=c['music_mood']
             if optimized: found[-1].update(story_pattern=c['story_pattern'],setup=text(c['setup'],300),payoff=text(c['payoff'],300),penalties=c['penalties'],source_dialogue=transcript,processing_mode=args.processing_mode)
         except (ValueError,KeyError,TypeError,OverflowError,AttributeError) as exc:
             if optimized: perf.reject(str(exc) if isinstance(exc,ValueError) else 'Invalid model response')
@@ -249,29 +258,53 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             event(length-2.6,length-.3,rf'{{\an2\pos(490,{end_y})\fad(200,200)}}'+ass_text(end_prompt),'Overlay')
     return header+'\n'.join(lines)+'\n'
 
-def decorate(master,dest,words,clip,style,overlays,software,variant=0):
+def decorate(master,dest,words,clip,style,overlays,software,variant=0,video_base=None):
     from shorts import duration
     length=duration(master); split=clip.get('layout')=='gameplay_top_streamer_bottom'
     with tempfile.TemporaryDirectory(prefix='viral-overlay-') as tmp:
         root=Path(tmp); (root/'words.ass').write_text(build_ass(words,clip,length,style,split,overlays,variant),encoding='utf-8')
         graph='[0:a]highpass=f=65,afftdn=nf=-30,acompressor=threshold=0.125:ratio=2,alimiter=limit=0.89:level=false[voice]'
         args=['ffmpeg','-v','error','-y','-i',str(master.resolve())]
-        # User-supplied rights-cleared music only, never fetch commercial music.
-        music=os.getenv('SHORTS_AUTHORIZED_MUSIC','')
-        if music:
-            p=Path(music).expanduser().resolve()
-            if not p.is_file(): raise ValueError('Configured authorized music file does not exist')
-            args+=['-stream_loop','-1','-i',str(p)]
-            graph+=';[voice]asplit=2[v1][v2];[1:a]volume=0.10,afade=t=in:d=0.4,afade=t=out:st='+str(max(0,length-.6))+':d=0.6[m];[m][v2]sidechaincompress=threshold=0.025:ratio=8[duck];[v1][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.89:level=false[a]'
-        else: graph+=';[voice]anull[a]'
-        effect=os.getenv('SHORTS_AUTHORIZED_SFX',''); impact=clip.get('impact_output',-1)
-        if effect and 0<=impact<length-.25:
-            p=Path(effect).expanduser().resolve()
-            if not p.is_file(): raise ValueError('Configured authorized sound effect does not exist')
-            idx=2 if music else 1; args+=['-i',str(p)]; delay=round(impact*1000)
-            graph+=f';[{idx}:a]atrim=duration=0.65,asetpts=PTS-STARTPTS,volume=0.13,adelay={delay}:all=1[fx];[a][fx]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.89:level=false[finala]'
-        else: graph+=';[a]anull[finala]'
-        args+=['-filter_complex_threads','2','-filter_complex',graph,'-map','0:v:0','-map','[finala]','-t',str(length),'-c:a','aac','-b:a','160k','-ar','48000','-movflags','+faststart']
+        timeline=clip.get('audio_timeline')
+        if timeline is not None:
+            from sound_studio import asset_path
+            idx=1; music=asset_path(timeline.get('music')); effect=asset_path(timeline.get('sfx'))
+            if (timeline.get('music') and not music) or (timeline.get('sfx') and not effect): raise ValueError('Licensed audio asset changed or is missing')
+            if music:
+                start=float(timeline['music_start']); gain=float(timeline['music_gain']); impact=float(timeline.get('impact',-1))
+                args+=['-ss',str(start),'-i',str(music)]; idx+=1
+                # Smooth fades and sidechain ducking. Brief pre-payoff dip for comedy, never move source dialogue.
+                env=f'{gain:.4f}'
+                if .8<impact<length-.3 and timeline.get('story_pattern') in ('conversation_comedy','mistake_consequence','suspense_reveal'):
+                    env+=f"*(1-0.75*max(0,1-abs(t-{impact-.25:.3f})/0.45))"
+                graph+=f";[voice]asplit=2[v1][v2];[1:a]aresample=48000,atrim=duration={length},asetpts=PTS-STARTPTS,volume='{env}':eval=frame,afade=t=in:d=0.35,afade=t=out:st={max(0,length-.7)}:d=0.7[m];[m][v2]sidechaincompress=threshold=0.025:ratio=8:attack=15:release=260[duck];[v1][duck]amix=inputs=2:duration=first:normalize=0[a]"
+            else: graph+=';[voice]anull[a]'
+            if effect and 0<=float(timeline['sfx_time'])<length-.2:
+                args+=['-i',str(effect)]; delay=round(float(timeline['sfx_time'])*1000)
+                graph+=f";[{idx}:a]aresample=48000,atrim=duration=0.65,asetpts=PTS-STARTPTS,volume={float(timeline['sfx_gain']):.4f},afade=t=out:st=0.45:d=0.2,adelay={delay}:all=1[fx];[a][fx]amix=inputs=2:duration=first:normalize=0[mix]"; idx+=1
+            else:graph+=';[a]anull[mix]'
+            graph+=f";[mix]loudnorm=I={float(timeline.get('mix_target_lufs',-14))}:TP={float(timeline.get('peak_ceiling_dbtp',-1.5))}:LRA=11,aresample=48000[finala]"
+            video_map='0:v:0'
+            if video_base is not None:
+                args+=['-i',str(Path(video_base).resolve())]; video_map=f'{idx}:v:0'
+        else:
+            video_map='0:v:0'
+            # User-supplied rights-cleared music only, never fetch commercial music.
+            music=os.getenv('SHORTS_AUTHORIZED_MUSIC','')
+            if music:
+                p=Path(music).expanduser().resolve()
+                if not p.is_file(): raise ValueError('Configured authorized music file does not exist')
+                args+=['-stream_loop','-1','-i',str(p)]
+                graph+=';[voice]asplit=2[v1][v2];[1:a]volume=0.10,afade=t=in:d=0.4,afade=t=out:st='+str(max(0,length-.6))+':d=0.6[m];[m][v2]sidechaincompress=threshold=0.025:ratio=8[duck];[v1][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.89:level=false[a]'
+            else: graph+=';[voice]anull[a]'
+            effect=os.getenv('SHORTS_AUTHORIZED_SFX',''); impact=clip.get('impact_output',-1)
+            if effect and 0<=impact<length-.25:
+                p=Path(effect).expanduser().resolve()
+                if not p.is_file(): raise ValueError('Configured authorized sound effect does not exist')
+                idx=2 if music else 1; args+=['-i',str(p)]; delay=round(impact*1000)
+                graph+=f';[{idx}:a]atrim=duration=0.65,asetpts=PTS-STARTPTS,volume=0.13,adelay={delay}:all=1[fx];[a][fx]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.89:level=false[finala]'
+            else: graph+=';[a]anull[finala]'
+        args+=['-filter_complex_threads','2','-filter_complex',graph,'-map',video_map,'-map','[finala]','-t',str(length),'-c:a','aac','-b:a','160k','-ar','48000','-movflags','+faststart']
         if style!='off' or overlays:
             args+=['-vf','ass=words.ass','-filter_threads','2','-pix_fmt','yuv420p']
             encoder=perf.encoder_args(software)
@@ -338,8 +371,16 @@ def render(args,source,dest,segments,clip):
                 offset+=y-x
             return -1
         decor['impact_output']=map_time(clip.get('impact',-1))
+        audio_plan=None
+        if getattr(args,'auto_music',False):
+            from sound_studio import plan,required_platforms,references,attributions
+            ref=next((r for r in references() if r['id']==getattr(args,'reference_style','')),None)
+            history=getattr(args,'music_history',[])
+            audio_plan=plan(decor,final_length,required_platforms(args),previous=history,reference=ref)
+            decor['audio_timeline']=audio_plan
+            if audio_plan['music'] or audio_plan['sfx']: print('Audio director: '+str((audio_plan['music'] or audio_plan['sfx'])['name']),flush=True)
         with perf.measure('decoration_render'):
-            if optimized and split and style_caption=='off' and not args.viral_overlays and not (os.getenv('SHORTS_AUTHORIZED_MUSIC') or os.getenv('SHORTS_AUTHORIZED_SFX')):
+            if optimized and split and style_caption=='off' and not args.viral_overlays and not (os.getenv('SHORTS_AUTHORIZED_MUSIC') or os.getenv('SHORTS_AUTHORIZED_SFX')) and not (audio_plan and (audio_plan['music'] or audio_plan['sfx'])):
                 # Gaming master already has compression, limiting and loudness normalization.
                 # Keep it as the final export without another audio pass.
                 try: os.link(master,dest)
@@ -349,6 +390,9 @@ def render(args,source,dest,segments,clip):
                 perf.count('decoration_pass_avoided')
             else: decorate(master,dest,words,decor,style_caption,args.viral_overlays,args.software)
         quality=validate_export(dest,words,style_caption)
+        if audio_plan and (audio_plan['music'] or audio_plan['sfx']):
+            from sound_studio import measure_mix
+            quality['audio_mix']=measure_mix(dest,audio_plan)
         if optimized:
             quality['caption_source']='source word timings remapped' if style_caption!='off' and perf.map_words(segments,meta.get('edit_pieces',[]),final_length) else 'edited audio ASR' if style_caption!='off' else 'off'
             if args.processing_mode=='professional' and quality.get('frozen_seconds',0)>quality['duration']*.5: raise ValueError('Excessive frozen imagery in professional mode')
@@ -375,12 +419,15 @@ def render(args,source,dest,segments,clip):
                     pace=1.04; alt_master=Path(tmp)/'paced.mp4'
                     subprocess.run(['ffmpeg','-v','error','-y','-i',str(master),'-vf','setpts=PTS/1.04,fps=30','-af','atempo=1.04','-c:v','libx264','-preset','veryfast','-crf','20','-threads','4','-c:a','aac',str(alt_master)],check=True,timeout=180)
                     alt_words=[{**w,'start':w['start']/pace,'end':w['end']/pace} for w in words]; alt_decor={**decor,'impact_output':decor['impact_output']/pace}
+                if audio_plan is not None:
+                    from sound_studio import plan,required_platforms
+                    alt_decor={**alt_decor,'audio_timeline':plan(alt_decor,duration(alt_master),required_platforms(args),previous=getattr(args,'music_history',[]),reference=ref,music_id=audio_plan['music']['id'] if audio_plan['music'] else None)}
                 decorate(alt_master,variation,alt_words,alt_decor,alt,args.viral_overlays,args.software,1)
                 validate_export(variation,alt_words,alt); variations.append({'file':variation.name,'caption_style':alt,'speed':pace,'label':'Alternate presentation · never auto-uploaded'})
             except (ValueError,OSError,subprocess.SubprocessError) as e:
                 variation.unlink(missing_ok=True);print('Alternate rejected: '+str(e),flush=True)
         # Keep a clean master only when caption editing explicitly requested.
-        if style_caption!='off':
+        if style_caption!='off' or audio_plan is not None:
             import shutil
             clean=dest.with_name(dest.stem.replace('pending_','')+'_master.mp4');shutil.copy2(master,clean)
             dest.with_name(dest.stem.replace('pending_','')+'_words.json').write_text(json.dumps(words,ensure_ascii=False),encoding='utf-8')
@@ -388,7 +435,11 @@ def render(args,source,dest,segments,clip):
         thumb=dest.with_name(dest.stem.replace('pending_','')+'_thumb.jpg'); t=min(max(0,map_time(clip['start']+clip.get('thumbnail_time',0))),max(0,final_length-.2))
         try: subprocess.run(['ffmpeg','-v','error','-y','-ss',str(t),'-i',str(dest),'-frames:v','1','-vf','scale=540:960',str(thumb)],check=True,timeout=30)
         except (OSError,subprocess.SubprocessError): print('Thumbnail unavailable; main export retained.',flush=True)
-        return {**meta,**reviewed,'viral':True,'quality':quality,'variations':variations,'caption_style':style_caption,'overlays':args.viral_overlays,'cta_displayed':bool(args.viral_overlays and final_length>=18 and clip.get('cta')),'word_count':len(words),'thumbnail_file':thumb.name if thumb.is_file() and thumb.stat().st_size else None,'impact_output':decor['impact_output'],'fingerprint':fingerprint(master),'output_duration':round(duration(dest),2)}
+        audio_meta={}
+        if audio_plan is not None:
+            if audio_plan['music']: args.music_history=(getattr(args,'music_history',[])+[audio_plan['music']['id']])[-5:]
+            audio_meta={'audio_timeline':audio_plan,'editing_timeline':{'source_clock':'input media local seconds','segments':meta.get('edit_pieces',[]),'layout':meta.get('layout'),'hook':clip.get('hook','') if args.viral_overlays else '', 'captions':style_caption,'impact_output':decor['impact_output'],'ending':clip.get('loop_reason',''),'audio':audio_plan},'music_attribution':attributions(audio_plan),'music_mood':clip.get('music_mood')}
+        return {**meta,**reviewed,**audio_meta,'viral':True,'quality':quality,'variations':variations,'caption_style':style_caption,'overlays':args.viral_overlays,'cta_displayed':bool(args.viral_overlays and final_length>=18 and clip.get('cta')),'word_count':len(words),'thumbnail_file':thumb.name if thumb.is_file() and thumb.stat().st_size else None,'impact_output':decor['impact_output'],'fingerprint':fingerprint(master),'output_duration':round(duration(dest),2)}
 
 def story_schema():
     import copy

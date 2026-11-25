@@ -76,6 +76,8 @@ def publish(path,clip,args,caption=None):
     if ch['id']!=args.instagram_account: raise ValueError('Instagram account changed; publishing blocked.')
     q=quality(path); key=digest(path); source=clip.get('source_identity',''); a,b=clip['start'],clip['end']; day=datetime.date.today().isoformat()
     caption=caption_for(clip) if caption is None else str(caption).strip()
+    from sound_studio import ensure_publish
+    caption=ensure_publish(clip,'instagram',caption)
     if not caption or len(caption)>2200: raise ValueError('Instagram caption must be 1–2200 characters.')
     with ledger() as (records,save):
         for r in records:

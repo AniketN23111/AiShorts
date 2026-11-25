@@ -1,26 +1,30 @@
 """V13 bounded scanning, content-addressed caches, timing and editorial primitives.
 No network services or new models. Signals propose windows, never establish quality.
 """
-import contextlib, functools, hashlib, json, math, os, re, resource, subprocess, time
+import contextlib, functools, hashlib, json, math, os, re, resource, subprocess, time, threading
 from pathlib import Path
 
 MODES=('fast','smart','professional')
 WEIGHTS={'hook':25,'story':20,'retention':20,'entertainment':15,'emotion':10,'context':5,'rewatch':5}
 PATTERNS=('setup_outcome','question_answer','challenge_victory','argument_resolution','conversation_comedy','suspense_reveal','mistake_consequence','fact_explanation','prediction_result','emotional_payoff','other')
 PENALTIES=('missing_context','boring_sections','weak_ending','unclear_speech','poor_visual_quality','repetitive_content','misleading_editing','duplicate_moment')
-_STATS={}; _COUNTS={}; _REJECTIONS={}; _START=time.monotonic()
+_STATS={}; _COUNTS={}; _REJECTIONS={}; _START=time.monotonic(); _LOCK=threading.RLock()
 
-def count(name,n=1): _COUNTS[name]=_COUNTS.get(name,0)+n
+def count(name,n=1):
+    with _LOCK: _COUNTS[name]=_COUNTS.get(name,0)+n
 def reject(reason):
-    reason=str(reason)[:140];_REJECTIONS[reason]=_REJECTIONS.get(reason,0)+1
-    count("rejected_candidates")
+    reason=str(reason)[:140]
+    with _LOCK:
+        _REJECTIONS[reason]=_REJECTIONS.get(reason,0)+1
+        count("rejected_candidates")
 @contextlib.contextmanager
 def measure(name):
     start=time.monotonic()
     try: yield
     finally:
-        _STATS[name]=_STATS.get(name,0)+time.monotonic()-start
-        count(name+'_calls')
+        with _LOCK:
+            _STATS[name]=_STATS.get(name,0)+time.monotonic()-start
+            count(name+'_calls')
 
 def timed(name):
     def wrap(fn):
@@ -34,7 +38,7 @@ def snapshot():
     import sys
     usage=resource.getrusage(resource.RUSAGE_SELF); children=resource.getrusage(resource.RUSAGE_CHILDREN)
     scale=1024**2 if sys.platform=='darwin' else 1024
-    return {'seconds':{k:round(v,3) for k,v in _STATS.items()},'counts':dict(_COUNTS),'rejection_reasons':dict(_REJECTIONS),'worker_peak_rss_mib':round(usage.ru_maxrss/scale,1),'largest_finished_child_peak_rss_mib':round(children.ru_maxrss/scale,1),'worker_cpu_seconds':round(usage.ru_utime+usage.ru_stime,2),'elapsed_seconds':round(time.monotonic()-_START,2)}
+    with _LOCK: return {'seconds':{k:round(v,3) for k,v in _STATS.items()},'counts':dict(_COUNTS),'rejection_reasons':dict(_REJECTIONS),'worker_peak_rss_mib':round(usage.ru_maxrss/scale,1),'largest_finished_child_peak_rss_mib':round(children.ru_maxrss/scale,1),'worker_cpu_seconds':round(usage.ru_utime+usage.ru_stime,2),'elapsed_seconds':round(time.monotonic()-_START,2)}
 
 @functools.lru_cache(maxsize=32)
 def _fingerprint(path,size,mtime):

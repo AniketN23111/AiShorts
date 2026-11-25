@@ -61,6 +61,9 @@ def publish(path,clip,args):
     from googleapiclient.http import MediaFileUpload
     if not args.authorized or args.made_for_kids not in ('yes','no') or clip['score']<args.score: raise ValueError('Publishing permission, audience or score gate not satisfied')
     title=str(clip['title']).strip(); desc='\n\n'.join(x for x in [clip.get('description',''), 'Source: '+clip['source_url'] if clip.get('source_url') else '', ' '.join(clip.get('hashtags',[]))] if x).replace('<','').replace('>','')
+    from sound_studio import ensure_publish
+    desc=ensure_publish(clip,'youtube',desc)
+    if len(desc.encode('utf-8'))>5000 and clip.get('audio_timeline'): raise ValueError('Description including required music credit exceeds upload limit')
     if not 1<=len(title)<=100 or any(c in title for c in '<>'): raise ValueError('Invalid title')
     tags=[]; used=0
     for tag in clip.get('tags',[]):
