@@ -14,10 +14,14 @@ def feedback(channel):
 def summarize(rows):
     qualified=[r for r in rows if r.get('views',0)>=100 and r.get('retention') is not None]
     groups={k:[r['retention'] for r in qualified if lo<=r.get('duration',0)<hi] for k,lo,hi in [('15–25s',15,25),('25–35s',25,35),('35–45s',35,46)]}
-    for field in ('style','caption_style','hook_band','cta_present'):
+    for field in ('style','caption_style','hook_band','cta_present','topic'):
         for key in {str(r[field]) for r in qualified if r.get(field) is not None}:
             groups[field+' '+key]=[r['retention'] for r in qualified if str(r.get(field))==key]
-    usable=[f'{k}: {statistics.mean(v):.1f}% average viewed (n={len(v)})' for k,v in groups.items() if len(v)>=3]
+    usable=[f'{k}: {statistics.mean(v):.1f}% average viewed (n={len(v)})' for k,v in sorted(groups.items()) if len(v)>=3]
+    # Aggregate only observed metrics; missing counts remain unknown.
+    known=[r for r in qualified if r.get('subscribers_gained') is not None]
+    if len(known)>=3 and sum(r['views'] for r in known)>0:
+        usable.append(f"Observed overall subscriber gain per 1,000 views: {1000*sum(r['subscribers_gained'] for r in known)/sum(r['views'] for r in known):.2f} (n={len(known)})")
     return 'Observed performance, directional not causal; only groups with at least three videos and 100 views each: '+'; '.join(usable) if usable else ''
 
 def save(channel,rows,source):
@@ -41,7 +45,7 @@ def import_csv(channel,content):
             except (ValueError,TypeError):raise ValueError('Invalid numeric value for '+field) from None
             if not math.isfinite(v) or v<0 or field=='duration' and v<=0:raise ValueError('Invalid numeric value for '+field)
             values[field]=v
-        rows.append({'video_id':vid,**values,'style':str(row.get('style',''))[:40] or None,'caption_style':str(row.get('caption_style',''))[:40] or None,'source':'user_import'})
+        rows.append({'video_id':vid,**values,'style':str(row.get('style',''))[:40] or None,'caption_style':str(row.get('caption_style',''))[:40] or None,'hook_band':str(row.get('hook_band',''))[:40] or None,'cta_present':{'true':True,'false':False,'1':True,'0':False}.get(str(row.get('cta_present','')).lower()),'topic':str(row.get('topic',''))[:60] or None,'source':'user_import'})
     if not rows:raise ValueError('CSV contains no measured rows.')
     return save(channel,rows,'user_import')
 
@@ -64,7 +68,7 @@ def refresh(expected_channel=None):
             vals=report['rows'][0]; headers=[x['name'] for x in report.get('columnHeaders',[])]; metrics=dict(zip(headers,vals)) if headers else dict(zip(('views','averageViewPercentage','averageViewDuration','likes','comments','shares','subscribersGained'),vals))
             if metrics.get('views') is None: continue
             ratings=r.get('ratings') or {}; hook=ratings.get('hook')
-            entry={'video_id':r['id'],'duration':r['duration'],'views':metrics['views'],'retention':metrics.get('averageViewPercentage'),'average_view_duration':metrics.get('averageViewDuration'),'likes':metrics.get('likes'),'comments':metrics.get('comments'),'shares':metrics.get('shares'),'subscribers_gained':metrics.get('subscribersGained'),'style':r.get('viral_style'),'caption_style':r.get('caption_style'),'hook_band':('90+' if hook>=90 else 'under 90') if isinstance(hook,(int,float)) else None,'cta_present':bool(r.get('cta')) if r.get('viral_style') else None,'source':'youtube_api'}
+            entry={'video_id':r['id'],'duration':r['duration'],'views':metrics['views'],'retention':metrics.get('averageViewPercentage'),'average_view_duration':metrics.get('averageViewDuration'),'likes':metrics.get('likes'),'comments':metrics.get('comments'),'shares':metrics.get('shares'),'subscribers_gained':metrics.get('subscribersGained'),'style':r.get('viral_style'),'caption_style':r.get('caption_style'),'hook_band':('90+' if hook>=90 else 'under 90') if isinstance(hook,(int,float)) else None,'cta_present':r.get('cta_displayed'),'topic':r.get('topic'),'source':'youtube_api'}
             rows.append(entry)
     # Separate retention report where the channel/video supports it. Never substitute estimates.
     for row in rows[-5:]:

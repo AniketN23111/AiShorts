@@ -29,10 +29,13 @@ def validate(data):
     count,minutes,segment,score=(int(data.get(k,v)) for k,v in [('count',6),('minutes',0),('segment',120),('score',75)])
     layout,language=data.get('layout','original'),data.get('language','')
     mode=data.get('mode','auto')
-    if not (0<=count<=100 and 0<=minutes<=720 and segment in (60,120,180) and 0<=score<=100 and layout in ('original','fit','crop') and language in ('','en','hi','mr') and mode in ('auto','live','replay')):
+    if not (0<=count<=100 and 0<=minutes<=720 and segment in (60,120,180) and 0<=score<=100 and layout in ('original','fit','crop') and language in ('','en','hi','mr','ta','te','bn','gu','kn','ml','pa','ur','es','fr','de','ja','ko','zh','pt','ar') and mode in ('auto','live','replay')):
         raise ValueError('Invalid clip settings.')
     from viral import PRESETS, CAPTIONS
     if data.get('viral_preset','') not in ('',*PRESETS) or data.get('viral_captions','off') not in CAPTIONS: raise ValueError('Invalid viral preset or caption style.')
+    if data.get('chat_file'):
+        from editorial_review import chat_path
+        chat_path(data['chat_file'])
     if data.get('face_region'):
         from auto_publish import parse_region
         parse_region(data['face_region'])
@@ -69,6 +72,11 @@ def start(data):
             if data.get('viral_overlays') is True: cmd+=['--viral-overlays']
             if data.get('viral_variants') is True: cmd+=['--viral-variants']
             if data.get('viral_full_scan') is True: cmd+=['--viral-full-scan']
+            if data.get('viral_review') is True: cmd+=['--viral-review']
+            if data.get('chat_file'):
+                from editorial_review import chat_path
+                cmd+=['--chat-file',str(chat_path(data['chat_file']))]
+                if data.get('chat_capture_clock') is True: cmd+=['--chat-capture-clock']
         feedback_channel=data.get('feedback_channel') or data.get('channel_id')
         if feedback_channel:
             cmd+=['--feedback-channel',str(feedback_channel)[:100]]
@@ -113,19 +121,7 @@ def status(job):
     from live import closed_segments
     info['segments_ready']=max(info['segments_ready'],len(closed_segments(folder/'capture')))
     if info.get('capture') in ('live','replay') and (folder/'capture_done').exists(): info['capture']='ended'
-    clips=[]
-    for manifest in folder.glob('*/clips.json'):
-        for clip in json.loads(manifest.read_text()):
-            name=clip.get('file','')
-            if re.fullmatch(r'short_\d+\.mp4',name) and (manifest.parent/name).is_file():
-                clips.append({**clip,'video':f'/media/{job["id"]}/{manifest.parent.name}/{name}','subtitle':f'/media/{job["id"]}/{manifest.parent.name}/{Path(name).stem}.srt' if (manifest.parent/Path(name).with_suffix('.srt')).exists() else None})
-    for clip in clips:
-        if clip.get('viral'):
-            base=clip['video'].rsplit('/',1)[0]+'/'
-            clip['variations']=[{**v,'video':base+v['file']} for v in clip.get('variations',[]) if re.fullmatch(r'short_\d+_alt\.mp4',v.get('file',''))]
-            if clip.get('thumbnail_file'): clip['thumbnail']=base+clip['thumbnail_file']
-            words=OUTPUT/job['id']/clip['video'].split('/')[-2]/(Path(clip['file']).stem+'_words.json')
-            if words.is_file(): clip['words_url']=base+words.name
+    clips=read_clips(job['id'])
     logs=[]
     for name in ('run.log','capture.log','download.log'):
         p=folder/name
@@ -139,6 +135,47 @@ def status(job):
     if (folder/'disk_limit').exists(): info['message']+=' · Capture stopped: low disk space.'
     if job['stopped'] and state=='running' and info['capture']!='ended': info['capture']='stopping'
     return {**info,'id':job['id'],'state':state,'elapsed':max(0,int(job.get('finished',time.time())-job['started'])),'logs':'\n'.join(logs),'clips':clips}
+
+
+def read_clips(job_id):
+    if not re.fullmatch(r'[0-9a-f]{32}',job_id): raise ValueError('Invalid session')
+    folder=OUTPUT/job_id
+    clips=[]
+    for manifest in folder.glob('*/clips.json'):
+        if not re.fullmatch(r'\d{8}_\d{6}_\d{6}',manifest.parent.name): continue
+        try: records=json.loads(manifest.read_text())
+        except (OSError,ValueError): continue
+        if not isinstance(records,list): continue
+        for clip in records:
+            if not isinstance(clip,dict): continue
+            name=clip.get('file','')
+            if re.fullmatch(r'short_\d+\.mp4',name) and (manifest.parent/name).is_file():
+                for suffix,field in (('.upload.json','publishing'),('.instagram.json','instagram_publishing')):
+                    try:
+                        receipt=json.loads((manifest.parent/name).with_suffix(suffix).read_text())
+                        if isinstance(receipt,dict) and receipt.get('state'): clip[field]=receipt
+                    except (OSError,ValueError): pass
+                clips.append({**clip,'video':f'/media/{job_id}/{manifest.parent.name}/{name}','subtitle':f'/media/{job_id}/{manifest.parent.name}/{Path(name).stem}.srt' if (manifest.parent/Path(name).with_suffix('.srt')).exists() else None})
+    for clip in clips:
+        if clip.get('viral'):
+            base=clip['video'].rsplit('/',1)[0]+'/'
+            clip['variations']=[{**v,'video':base+v['file']} for v in clip.get('variations',[]) if re.fullmatch(r'short_\d+_alt\.mp4',v.get('file',''))]
+            if re.fullmatch(r'short_\d+_thumb\.jpg',str(clip.get('thumbnail_file',''))): clip['thumbnail']=base+clip['thumbnail_file']
+            words=OUTPUT/job_id/clip['video'].split('/')[-2]/(Path(clip['file']).stem+'_words.json')
+            if words.is_file(): clip['words_url']=base+words.name
+    return clips
+
+def library():
+    if not OUTPUT.exists(): return []
+    rows=[]
+    for folder in sorted((p for p in OUTPUT.iterdir() if p.is_dir() and re.fullmatch(r'[0-9a-f]{32}',p.name)),key=lambda p:p.stat().st_mtime,reverse=True):
+        clips=read_clips(folder.name)
+        if not clips: continue
+        try: info=json.loads((folder/'status.json').read_text())
+        except (OSError,ValueError): info={}
+        rows.append({'id':folder.name,'title':str(info.get('title') or 'Saved session')[:180],'count':len(clips),'modified':folder.stat().st_mtime})
+        if len(rows)>=100: break
+    return rows
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -155,6 +192,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed(): return self.reply({'error':'Invalid host'},403)
         path=unquote(urlsplit(self.path).path)
         if path == '/api/status': return self.reply(current())
+        if path == '/api/library': return self.reply({'sessions':library()})
+        saved=re.fullmatch(r'/api/library/([0-9a-f]{32})',path)
+        if saved:
+            job_id=saved.group(1)
+            if not (OUTPUT/job_id).is_dir(): return self.reply({'error':'Session not found'},404)
+            return self.reply({'id':job_id,'state':'saved','clips':read_clips(job_id)})
         if path == '/api/analytics':
             from publisher import CONFIG
             file=CONFIG/'analytics-feedback.json'

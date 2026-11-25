@@ -1,3 +1,7 @@
+# V12 — Viral Editor & Social Studio
+
+See [V12_SETUP.md](V12_SETUP.md) for the independent editorial gate, saved-session library and installation. Existing V11 social publishing and 70/30 layout remain available.
+
 # V11 — YouTube + Instagram Reels
 
 See [V11_SETUP.md](V11_SETUP.md) for the 70/30 Gaming Pro layout, Instagram connection and upgrade instructions. Earlier setup guides describe historical releases.
