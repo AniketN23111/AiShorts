@@ -1,11 +1,22 @@
 """Bounded visual/audio analysis and conservative gaming Shorts editor."""
-import json, math, subprocess, tempfile, urllib.request, re
+import json, math, subprocess, tempfile, urllib.request, re, os
 from pathlib import Path
 
 class SplitLayoutUnavailable(ValueError):
     """Candidate does not support the required gameplay/facecam layout."""
 
 def sample(source,start,end,region=None):
+    import performance as perf
+    cache=None
+    if os.getenv('SHORTS_PROCESSING_MODE') in perf.MODES and Path(source).is_file():
+        cache=perf.cache_path('facecam',f'{perf.fingerprint(source)}:{start:.3f}:{end:.3f}:{region}'); prior=perf.read(cache)
+        if isinstance(prior,list) and len(prior)==2:perf.count('facecam_cache_hits');return prior[0],prior[1]
+    with perf.measure('facecam_analysis'):
+        result=_sample(source,start,end,region)
+    if cache:perf.save(cache,result)
+    return result
+
+def _sample(source,start,end,region=None):
     import cv2, numpy as np
     cv2.setNumThreads(2)
     cap=cv2.VideoCapture(str(source)); w=int(cap.get(3)); h=int(cap.get(4)); fps=cap.get(5) or 30
@@ -107,8 +118,8 @@ def render(source,dest,segments,clip,software=False,region=None):
         raise SplitLayoutUnavailable('Facecam not confirmed throughout the candidate; skipping a possible scene change.')
     # Cut only silence AND low visual motion; no artificial reorder or fabricated loop.
     quiet=[(x,y) for x,y in quiet_ranges(source,a,b) if all(f['motion']<.018 for f in frames if x<=f['t']<=y)]
-    pieces,holes=edit_plan(segments,a,b,quiet)
-    if sum(y-x for x,y in pieces)<15: pieces=[(a,b)]; holes=[]
+    optimized=bool(clip.get('processing_mode')); pieces,holes=edit_plan(segments,a,b,quiet,event_only=optimized)
+    if sum(y-x for x,y in pieces)<(10 if optimized else 15): pieces=[(a,b)]; holes=[]
     # Split at measured/AI-suggested impact for restrained reaction punch-in.
     impact=clip.get('impact',-1); pieces2=[]
     for x,y in pieces:
@@ -122,7 +133,7 @@ def render(source,dest,segments,clip,software=False,region=None):
     with tempfile.TemporaryDirectory(prefix='gaming-',dir=dest.parent) as td:
         root=Path(td); shots=[]
         for i,(x,y) in enumerate(pieces):
-            hot=a<=impact<=b and x<=impact+1.3 and y>=impact
+            hot=a<=impact<=b and (x<impact+1.3 and y>impact if optimized else x<=impact+1.3 and y>=impact)
             # Preserve the entire gameplay frame incl. HUD using a blurred fill behind it.
             grade='eq=contrast=1.035:saturation=1.06,unsharp=5:5:0.25:5:5:0'
             gh=1344; fh=576
@@ -154,8 +165,10 @@ def render(source,dest,segments,clip,software=False,region=None):
                 graph=f'[0:v]{grade},split[cam][game];[cam]{face},scale=1080:{fh},setsar=1[c];'+gameplay+';[g][c]vstack=inputs=2,fps=30[v]'
             p=root/f'shot{i:03}.mp4'; shots.append(p)
             base=['ffmpeg','-v','error','-y','-ss',str(x),'-i',str(source),'-t',str(y-x),'-filter_complex_threads','2','-filter_complex',graph,'-map','[v]','-map','0:a:0','-af',f'highpass=f=65,acompressor=threshold=0.10:ratio=2.5:attack=15:release=180,alimiter=limit=0.89:level=false,afade=t=in:d=0.015,afade=t=out:st={max(0,y-x-.015):.3f}:d=0.015','-ar','48000','-ac','2','-pix_fmt','yuv420p','-threads','4','-c:a','aac','-b:a','160k']
-            if not software:
-                try: subprocess.run(base+['-c:v','h264_videotoolbox','-b:v','8M',str(p)],check=True,timeout=180); continue
+            from performance import encoder_args
+            encoder=encoder_args(software) if optimized else None if software else ['-c:v','h264_videotoolbox','-b:v','8M']
+            if encoder:
+                try: subprocess.run(base+encoder+[str(p)],check=True,timeout=180); continue
                 except subprocess.CalledProcessError: software=True
             subprocess.run(base+['-c:v','libx264','-preset','veryfast','-crf','20',str(p)],check=True,timeout=180)
         manifest=root/'shots.txt'; manifest.write_text(''.join(f"file '{p.name}'\n" for p in shots))

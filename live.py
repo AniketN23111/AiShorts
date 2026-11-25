@@ -251,14 +251,19 @@ def main(args):
     if getattr(args,'edit_style','clean')=='gaming': args.captions=False
     if getattr(args,'viral_preset',''):
         os.environ['SHORTS_VIRAL_SESSION']='1'
+        os.environ['SHORTS_PROCESSING_MODE']=getattr(args,'processing_mode','smart')
     from auto_publish import identity
     args.source_identity=identity(getattr(args,'url',None),getattr(args,'input_file',None))
     job=args.output.resolve(); job.mkdir(parents=True,exist_ok=True)
     source=job/'capture'; source.mkdir(); out=job/datetime.now().strftime('%Y%m%d_%H%M%S_%f'); out.mkdir()
     state={'stage':'source','message':'Detecting YouTube source…','capture':'connecting','segments_ready':0,'segments_processed':0,'captured_seconds':0,'eta':'Estimating','title':'','mode':getattr(args,'mode','auto'),'source_duration':None,'source_progress':None,'overall_eta':None,'target':args.count,'segment_seconds':args.segment,'progress':None}
     def update(**kw):
-        state.update(kw); atomic(job/'status.json',state)
+        from performance import snapshot
+        state.update(kw); state['performance']=snapshot(); atomic(job/'status.json',state)
     def stage(name,message,**kw):
+        previous=state.get('stage'); prior=state.get('stage_started')
+        if prior and previous in ('source','transcribe','analyze','export','publish'):
+            timings[previous]=max(0,time.time()-prior)
         estimate=timings.get(name)
         update(stage=name,message=message,eta='Estimating',stage_started=time.time(),stage_estimate=estimate,**kw)
     update(); clips=[]; prev=None; prev_segments=[]; prev_len=0.; offset=0.; index=0; proc=None; stop_sent=None; next_due=None; last_ready=0; timings={}
@@ -337,7 +342,7 @@ def main(args):
                         with tempfile.TemporaryDirectory(prefix='live-work-') as tmp:
                             work=Path(tmp); seg=transcribe(p,work,args.whisper,args.language or None); timings['transcribe']=time.monotonic()-started
                             boundary=prev_len if prev else 0.; base=offset-boundary
-                            window=([s for s in prev_segments if s['end']>=boundary-65] if prev else [])+[{**s,'start':s['start']+boundary,'end':s['end']+boundary,**({'words':[{**w,'start':w['start']+boundary,'end':w['end']+boundary} for w in s['words']]} if 'words' in s else {})} for s in seg]
+                            window=([s for s in prev_segments if s['end']>=boundary-(90 if getattr(args,'processing_mode',None) and getattr(args,'viral_preset','') else 65)] if prev else [])+[{**s,'start':s['start']+boundary,'end':s['end']+boundary,**({'words':[{**w,'start':w['start']+boundary,'end':w['end']+boundary} for w in s['words']]} if 'words' in s else {})} for s in seg]
                             stage('analyze',f'Finding highlights in segment {index+1}',progress=None); started=time.monotonic()
                             if getattr(args,'edit_style','clean')=='gaming' or getattr(args,'viral_preset',''):
                                 analysis_media=combine(prev,p,work) if prev else p
@@ -366,7 +371,8 @@ def main(args):
                                     try:
                                         edit_meta=viral_render(args,media,temp,subs,local)
                                     except ValueError as exc:
-                                        temp.unlink(missing_ok=True); print('Skipping viral candidate: '+str(exc),flush=True); continue
+                                        from performance import reject
+                                        reject(str(exc)); temp.unlink(missing_ok=True); print('Skipping viral candidate: '+str(exc),flush=True); continue
                                 elif getattr(args,'edit_style','clean') == 'gaming':
                                     from gaming import render as gaming_render, SplitLayoutUnavailable
                                     if local.get('impact',-1)>=0 and c['start']>=boundary: local={**local,'impact':local['impact']-boundary}
@@ -385,7 +391,8 @@ def main(args):
                                 dest=out/name; os.replace(temp,dest)
                                 if temp.with_suffix('.srt').exists(): os.replace(temp.with_suffix('.srt'),dest.with_suffix('.srt'))
                                 clips.append({**c,'start':c['start']+base,'end':c['end']+base,'file':name,**edit_meta,'source_url':getattr(args,'url',None),'source_identity':getattr(args,'source_identity','')})
-                                atomic(out/'clips.json',clips)
+                                from performance import count
+                                count('accepted_candidates'); atomic(out/'clips.json',clips)
                                 if publishing_enabled(args) and not getattr(args,'defer_publish',False):
                                     stage('publish',f'Publishing highlight {len(clips)}',progress=None)
                                     publish_ready(args,dest,clips[-1]); atomic(out/'clips.json',clips)
@@ -427,7 +434,7 @@ def main(args):
             if (job/'native').exists(): shutil.rmtree(job/'native',ignore_errors=True)
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(); inputs=p.add_mutually_exclusive_group(required=True); inputs.add_argument('--url'); inputs.add_argument('--input-file',type=Path); p.add_argument('--output',type=Path,required=True); p.add_argument('--mode',choices=['auto','live','replay'],default='auto'); p.add_argument('--authorized',action='store_true'); p.add_argument('--count',type=int,default=6); p.add_argument('--minutes',type=int,default=0); p.add_argument('--segment',type=int,default=120); p.add_argument('--score',type=int,default=75); p.add_argument('--layout',choices=['original','fit','crop'],default='original'); p.add_argument('--language',default=''); p.add_argument('--model',default=MODEL); p.add_argument('--whisper',default=WHISPER); p.add_argument('--browser',choices=['chrome']); p.add_argument('--native-fallback',action='store_true'); p.add_argument('--smart-replay',action='store_true'); p.add_argument('--edit-style',choices=['clean','dynamic','gaming'],default='clean'); p.add_argument('--captions',action='store_true'); p.add_argument('--keep-source',action='store_true'); p.add_argument('--software',action='store_true'); p.add_argument('--streamer',default=''); p.add_argument('--game',default=''); p.add_argument('--face-region',type=lambda x: __import__('auto_publish').parse_region(x)); p.add_argument('--publish-channel',default=''); p.add_argument('--made-for-kids',choices=['yes','no']); p.add_argument('--daily-limit',type=int,default=6); p.add_argument('--analytics-refresh',action='store_true'); p.add_argument('--viral-preset',choices=['','auto','gaming','podcast','funny','educational','emotional','motivational','cinematic','minimal','energy'],default=''); p.add_argument('--viral-captions',choices=['off','karaoke','bold','minimal'],default='off'); p.add_argument('--viral-overlays',action='store_true'); p.add_argument('--viral-variants',action='store_true'); p.add_argument('--viral-full-scan',action='store_true'); p.add_argument('--feedback-channel',default=''); p.add_argument('--instagram-account',default=''); p.add_argument('--viral-review',action='store_true'); p.add_argument('--chat-file',default=''); p.add_argument('--chat-capture-clock',action='store_true'); a=p.parse_args()
+    p=argparse.ArgumentParser(); inputs=p.add_mutually_exclusive_group(required=True); inputs.add_argument('--url'); inputs.add_argument('--input-file',type=Path); p.add_argument('--output',type=Path,required=True); p.add_argument('--mode',choices=['auto','live','replay'],default='auto'); p.add_argument('--authorized',action='store_true'); p.add_argument('--count',type=int,default=6); p.add_argument('--minutes',type=int,default=0); p.add_argument('--segment',type=int,default=120); p.add_argument('--score',type=int,default=75); p.add_argument('--layout',choices=['original','fit','crop'],default='original'); p.add_argument('--language',default=''); p.add_argument('--model',default=MODEL); p.add_argument('--whisper',default=WHISPER); p.add_argument('--browser',choices=['chrome']); p.add_argument('--native-fallback',action='store_true'); p.add_argument('--smart-replay',action='store_true'); p.add_argument('--edit-style',choices=['clean','dynamic','gaming'],default='clean'); p.add_argument('--captions',action='store_true'); p.add_argument('--keep-source',action='store_true'); p.add_argument('--software',action='store_true'); p.add_argument('--streamer',default=''); p.add_argument('--game',default=''); p.add_argument('--face-region',type=lambda x: __import__('auto_publish').parse_region(x)); p.add_argument('--publish-channel',default=''); p.add_argument('--made-for-kids',choices=['yes','no']); p.add_argument('--daily-limit',type=int,default=6); p.add_argument('--analytics-refresh',action='store_true'); p.add_argument('--viral-preset',choices=['','auto','gaming','podcast','funny','educational','emotional','motivational','cinematic','minimal','energy'],default=''); p.add_argument('--viral-captions',choices=['off','karaoke','bold','minimal'],default='off'); p.add_argument('--viral-overlays',action='store_true'); p.add_argument('--viral-variants',action='store_true'); p.add_argument('--viral-full-scan',action='store_true'); p.add_argument('--feedback-channel',default=''); p.add_argument('--instagram-account',default=''); p.add_argument('--viral-review',action='store_true'); p.add_argument('--chat-file',default=''); p.add_argument('--chat-capture-clock',action='store_true'); p.add_argument('--processing-mode',choices=['fast','smart','professional'],default='smart'); a=p.parse_args()
     if not a.authorized: p.error('Permission required')
     if a.publish_channel and ((a.edit_style!='gaming' and not a.viral_preset) or a.made_for_kids is None or not 1<=a.daily_limit<=30): p.error('Public upload requires Gaming or Viral mode, explicit audience and daily limit 1–30')
     if a.instagram_account and ((a.edit_style!='gaming' and not a.viral_preset) or not a.instagram_account.isdigit() or not 1<=a.daily_limit<=30): p.error('Instagram requires Gaming or Viral mode and daily limit 1–30')

@@ -26,16 +26,22 @@ def digest(path):
         for chunk in iter(lambda:f.read(1024*1024),b''): h.update(chunk)
     return h.hexdigest()
 
-def quality(path):
+def quality(path, detailed=False):
     raw=subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(path)],timeout=30)
     info=json.loads(raw); v=next((s for s in info['streams'] if s['codec_type']=='video'),{}); a=next((s for s in info['streams'] if s['codec_type']=='audio'),{})
     d=float(info['format']['duration'])
-    if (v.get('width'),v.get('height'))!=(1080,1920) or not 14.9<=d<=45.5 or not a or v.get('codec_name')!='h264' or a.get('codec_name')!='aac': raise ValueError('Quality check: expected 1080x1920 H.264/AAC and 15–45 seconds')
+    if (v.get('width'),v.get('height'))!=(1080,1920) or not 9.9<=d<=90.5 or not a or v.get('codec_name')!='h264' or a.get('codec_name')!='aac': raise ValueError('Quality check: expected 1080x1920 H.264/AAC and 10–90 seconds')
     # Full decode checks corruption; volumedetect verifies non-silent audio and peak.
-    p=subprocess.run(['ffmpeg','-hide_banner','-nostats','-v','info','-xerror','-i',str(path),'-map','0:v:0','-map','0:a:0','-af','volumedetect','-f','null','-'],capture_output=True,text=True,timeout=180)
+    p=subprocess.run(['ffmpeg','-hide_banner','-nostats','-v','info','-xerror','-i',str(path),'-map','0:v:0','-map','0:a:0','-af','volumedetect'+(',silencedetect=n=-45dB:d=2' if detailed else '')]+(['-vf','blackdetect=d=0.45:pix_th=0.10,freezedetect=n=-50dB:d=3'] if detailed else [])+['-f','null','-'],capture_output=True,text=True,timeout=180)
     mean=re.search(r'mean_volume:\s*(-?[\d.]+) dB',p.stderr); peak=re.search(r'max_volume:\s*(-?[\d.]+) dB',p.stderr)
     if p.returncode or not mean or not peak or float(mean[1]) < -48 or float(peak[1])>=0: raise ValueError('Quality check: decoding failure, silent or clipped audio')
-    return {'duration':d,'mean_db':float(mean[1]),'peak_db':float(peak[1])}
+    result={'duration':d,'mean_db':float(mean[1]),'peak_db':float(peak[1])}
+    if detailed:
+        result.update(black_seconds=sum(float(x) for x in re.findall(r'black_duration:([\d.]+)',p.stderr)),silence_seconds=sum(float(x) for x in re.findall(r'silence_duration:\s*([\d.]+)',p.stderr)),frozen_seconds=sum(float(x) for x in re.findall(r'freeze_duration:\s*([\d.]+)',p.stderr)))
+        # A trailing frozen frame run may not emit freeze_duration.
+        starts=re.findall(r'freeze_start:\s*([\d.]+)',p.stderr); ends=re.findall(r'freeze_end:\s*([\d.]+)',p.stderr)
+        if len(starts)>len(ends): result['frozen_seconds']+=max(0,d-float(starts[-1]))
+    return result
 
 @contextlib.contextmanager
 def ledger():

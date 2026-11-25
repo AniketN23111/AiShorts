@@ -36,8 +36,9 @@ def transcribe(source, work, model, language):
         from viral import words_for
         words=words_for(source,model,language)
         groups=[]
+        optimized=os.getenv('SHORTS_PROCESSING_MODE') in ('fast','smart','professional')
         for w in words:
-            if not groups or w['start']-groups[-1]['end']>.7 or w['end']-groups[-1]['start']>7:
+            if not groups or w['start']-groups[-1]['end']>.7 or w['end']-groups[-1]['start']>(12 if optimized else 7) or (optimized and groups[-1]['text'].rstrip().endswith(('.', '!', '?', '।', '。', '！', '？'))):
                 groups.append({'start':w['start'],'end':w['end'],'text':w['word'],'words':[w]})
             else:
                 groups[-1]['end']=w['end']; groups[-1]['text']+=' '+w['word']; groups[-1]['words'].append(w)

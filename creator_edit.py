@@ -3,7 +3,7 @@ import math, subprocess, tempfile, re
 from pathlib import Path
 
 
-def edit_plan(segments, start, end, silence=None, extra_holes=None):
+def edit_plan(segments, start, end, silence=None, extra_holes=None, event_only=False):
     """Remove only interior gaps between transcript phrases; never remove dialogue.
     Gaps are estimates from ASR, not a guarantee of acoustic silence.
     Split retained ranges for restrained punch-ins, at most every ~8 seconds.
@@ -45,7 +45,7 @@ def edit_plan(segments, start, end, silence=None, extra_holes=None):
     pieces=[]
     for a,b in ranges:
         # Avoid rapid artificial changes. Use evenly spaced 6–9s shots.
-        n=max(1,math.ceil((b-a)/9))
+        n=1 if event_only else max(1,math.ceil((b-a)/9))
         for i in range(n):
             pieces.append((a+(b-a)*i/n,a+(b-a)*(i+1)/n))
     return pieces, chosen

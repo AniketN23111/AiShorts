@@ -13,7 +13,7 @@ def feedback(channel):
 
 def summarize(rows):
     qualified=[r for r in rows if r.get('views',0)>=100 and r.get('retention') is not None]
-    groups={k:[r['retention'] for r in qualified if lo<=r.get('duration',0)<hi] for k,lo,hi in [('15–25s',15,25),('25–35s',25,35),('35–45s',35,46)]}
+    groups={k:[r['retention'] for r in qualified if lo<=r.get('duration',0)<hi] for k,lo,hi in [('10–15s',10,15),('15–25s',15,25),('25–35s',25,35),('35–45s',35,46),('46–60s',46,61),('61–90s',61,91)]}
     for field in ('style','caption_style','hook_band','cta_present','topic'):
         for key in {str(r[field]) for r in qualified if r.get(field) is not None}:
             groups[field+' '+key]=[r['retention'] for r in qualified if str(r.get(field))==key]

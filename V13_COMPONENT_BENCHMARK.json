@@ -1,0 +1,20 @@
+{
+  "environment": {
+    "platform": "linux",
+    "machine": "x86_64",
+    "python": "3.13.5"
+  },
+  "fixture": "synthetic 120s 640x360 proxy; 16s 1080x1920 output; no real AI inference",
+  "scan": {
+    "v12_seconds": 4.093,
+    "v13_seconds": 0.384,
+    "v12_samples": 225,
+    "v13_samples": 120,
+    "warm_cache_seconds": 0.001
+  },
+  "quality_validation": {
+    "v12_seconds": 1.356,
+    "v13_seconds": 0.885
+  },
+  "limitations": "One run, different scan granularity; not an end-to-end benchmark or clip-quality comparison."
+}

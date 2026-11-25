@@ -31,6 +31,8 @@ def validate(data):
     mode=data.get('mode','auto')
     if not (0<=count<=100 and 0<=minutes<=720 and segment in (60,120,180) and 0<=score<=100 and layout in ('original','fit','crop') and language in ('','en','hi','mr','ta','te','bn','gu','kn','ml','pa','ur','es','fr','de','ja','ko','zh','pt','ar') and mode in ('auto','live','replay')):
         raise ValueError('Invalid clip settings.')
+    from performance import MODES
+    if data.get('processing_mode','smart') not in MODES: raise ValueError('Invalid processing mode.')
     from viral import PRESETS, CAPTIONS
     if data.get('viral_preset','') not in ('',*PRESETS) or data.get('viral_captions','off') not in CAPTIONS: raise ValueError('Invalid viral preset or caption style.')
     if data.get('chat_file'):
@@ -68,7 +70,7 @@ def start(data):
             cmd+=['--streamer',str(data.get('streamer',''))[:80],'--game',str(data.get('game',''))[:80]]
             if data.get('face_region'): cmd+=['--face-region',data['face_region']]
         if data.get('viral_preset'):
-            cmd+=['--viral-preset',data['viral_preset'],'--viral-captions',data.get('viral_captions','off')]
+            cmd+=['--viral-preset',data['viral_preset'],'--viral-captions',data.get('viral_captions','off'),'--processing-mode',data.get('processing_mode','smart')]
             if data.get('viral_overlays') is True: cmd+=['--viral-overlays']
             if data.get('viral_variants') is True: cmd+=['--viral-variants']
             if data.get('viral_full_scan') is True: cmd+=['--viral-full-scan']
@@ -133,6 +135,7 @@ def status(job):
         info['eta']='~'+eta(remaining) if remaining>0 else 'Re-estimating'
     if state!='running': info.update(capture='ended',eta='—',message=f'{len(clips)} highlights ready' if state!='failed' else info['message'] if info.get('stage')=='error' else 'Session failed. See logs; completed highlights are retained.')
     if (folder/'disk_limit').exists(): info['message']+=' · Capture stopped: low disk space.'
+    info['pause_requested']=(folder/'pause').exists() and state=='running'
     if job['stopped'] and state=='running' and info['capture']!='ended': info['capture']='stopping'
     return {**info,'id':job['id'],'state':state,'elapsed':max(0,int(job.get('finished',time.time())-job['started'])),'logs':'\n'.join(logs),'clips':clips}
 
@@ -292,6 +295,14 @@ class Handler(BaseHTTPRequestHandler):
                 n=int(self.headers.get('Content-Length','0'))
                 if not 0<n<=8192: raise ValueError('Invalid request size.')
                 return self.reply({'id':start(json.loads(self.rfile.read(n)))})
+            if self.path in ('/api/pause','/api/resume'):
+                with LOCK:
+                    if not ACTIVE or ACTIVE['proc'].poll() is not None: raise ValueError('No active replay session.')
+                    folder=OUTPUT/ACTIVE['id']; state=json.loads((folder/'status.json').read_text())
+                    if state.get('capture')!='smart': raise ValueError('Pause is supported only for Smart Replay.')
+                    if self.path=='/api/pause': (folder/'pause').touch()
+                    else: (folder/'pause').unlink(missing_ok=True)
+                return self.reply({'ok':True})
             if self.path == '/api/stop':
                 with LOCK:
                     if ACTIVE and ACTIVE['proc'].poll() is None:

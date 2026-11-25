@@ -1,3 +1,7 @@
+# V13 — Performance & Story Studio
+
+See [V13_SETUP.md](V13_SETUP.md) for the optimized modes, measured component benchmarks, installation, and known limitations. V12 publishing, clip library, captions and 70/30 Gaming Pro remain available.
+
 # V12 — Viral Editor & Social Studio
 
 See [V12_SETUP.md](V12_SETUP.md) for the independent editorial gate, saved-session library and installation. Existing V11 social publishing and 70/30 layout remain available.
